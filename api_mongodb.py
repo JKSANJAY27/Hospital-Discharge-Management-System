@@ -1548,7 +1548,67 @@ async def transcribe_audio(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ==================== DOCUMENT UPLOAD ENDPOINTS ====================
+# ==================== DISCHARGE SIMPLIFICATION ====================
+
+@app.post("/discharge/simplify")
+async def simplify_discharge_instructions(
+    file: Optional[UploadFile] = File(None),
+    text: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Simplify discharge instructions from file or text.
+    """
+    if not file and not text:
+        raise HTTPException(status_code=400, detail="Must provide either file or text")
+
+    extracted_text = ""
+    if file:
+        # Save and process file
+        import tempfile
+        from pathlib import Path
+        from src.document_processor.pdf_extractor import MedicalDocumentExtractor
+        
+        # Verify file type
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported currently")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_path = Path(tmp.name)
+            
+        try:
+            extractor = MedicalDocumentExtractor(llm=config.llm_secondary)
+            extraction_result = await asyncio.to_thread(extractor.extract_pdf_content, tmp_path)
+            
+            if not extraction_result.get("success"):
+                raise HTTPException(status_code=500, detail=f"PDF extraction failed: {extraction_result.get('error')}")
+            
+            extracted_text = extraction_result.get("full_text", "")
+            
+        except Exception as e:
+            logger.error(f"File processing error: {e}")
+            raise HTTPException(status_code=500, detail=f"File processing error: {str(e)}")
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+            
+    else:
+        extracted_text = text
+
+    if not extracted_text or len(extracted_text.strip()) < 10:
+         raise HTTPException(status_code=400, detail="Could not extract sufficient text from input")
+
+    # Process with workflow
+    try:
+        logger.info(f"📄 User {current_user['_id']} requested discharge simplification ({len(extracted_text)} chars)")
+        result = await workflow.process_discharge_document(extracted_text)
+        return result
+    except Exception as e:
+        logger.error(f"Simplification failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/documents/upload")
 async def upload_medical_document(

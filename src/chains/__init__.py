@@ -4,10 +4,7 @@ Chain package initialization
 
 from .base_chains import GuardrailAndIntentChain, GuardrailChain, IntentClassifierChain, SymptomCheckerChain, ResponseFusionChain
 from .specialized_chains import (
-    GovernmentSchemeChain,
-    MentalWellnessChain,
-    YogaChain,
-    AyushChain,
+    DischargeSimplifierChain,
     HospitalLocatorChain
 )
 from .profile_chain import ProfileExtractionChain
@@ -21,10 +18,7 @@ __all__ = [
     'IntentClassifierChain',
     'SymptomCheckerChain',
     'ResponseFusionChain',
-    'GovernmentSchemeChain',
-    'MentalWellnessChain',
-    'YogaChain',
-    'AyushChain',
+    'DischargeSimplifierChain',
     'HospitalLocatorChain',
     'ProfileExtractionChain',
     'HealthAdvisoryChain',

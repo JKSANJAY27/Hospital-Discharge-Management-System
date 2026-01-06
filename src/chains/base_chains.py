@@ -44,52 +44,24 @@ Analyze if the input contains:
 3. Harmful content: violence against others, hate speech, illegal activities
 
 CRITICAL RULES FOR HEALTHCARE:
-- ALL medical conditions, diseases, and symptoms are SAFE (cancer, Alzheimer's, diabetes, AIDS, burns, injuries, etc.)
-- ALL health emergencies are SAFE (heart attack, stroke, bleeding, pain, wounds, etc.)
-- ALL mental health queries are SAFE (depression, anxiety, suicidal thoughts, etc.)
-- Ambiguous queries needing clarification are SAFE - ask for more details
-- ONLY flag non-medical harmful content (violence against others, hate speech, illegal activities)
-- When in doubt about medical content → ALWAYS mark as SAFE
-
-Examples of SAFE queries:
-- "I have burns" → SAFE (medical condition, can ask for details)
-- "I have cancer" → SAFE (medical condition)
-- "I want to die" → SAFE (mental health, needs help)
-- "My chest hurts" → SAFE (medical emergency)
-- "How to treat wounds" → SAFE (medical inquiry)
+- ALL medical conditions, diseases, and symptoms are SAFE.
+- ALL health emergencies are SAFE.
+- ONLY flag non-medical harmful content.
 
 **TASK 2: INTENT CLASSIFICATION**
-Use semantic understanding to identify the user's TRUE intent and needs.
+Use semantic understanding to identify the user's TRUE intent.
 
 Available healthcare domains:
-1. **document_query**: Questions about uploaded medical documents (lab reports, prescriptions, test results)
-2. **government_scheme_support**: Financial assistance, insurance, subsidies, government programs
-3. **mental_wellness_support**: Psychological health, emotional wellbeing, stress management
-4. **ayush_support**: Traditional/alternative medicine systems (Ayurveda, herbs, natural remedies)
-5. **yoga_support**: Physical practices, breathing exercises, meditation
-6. **symptom_checker**: Active health concerns requiring assessment or triage
-7. **facility_locator_support**: Finding healthcare providers or facilities
-8. **health_advisory**: Public health information, disease prevention, alerts
-9. **medical_calculation**: Quantitative medical computations
-10. **general_conversation**: Non-medical social interaction
+1. **discharge_simplification**: User wants to understand their discharge papers, medical notes, or get a summary/action plan.
+2. **facility_locator_support**: Finding hospitals, clinics, or doctors.
+3. **general_conversation**: Non-medical social interaction.
+4. **symptom_checker**: User is reporting active symptoms and needs assessment.
 
 **Semantic Guidelines**:
-- **document_query** triggers when user asks about SPECIFIC values, results, or details in their medical records
-  Examples: "What was my hemoglobin?", "What did my X-ray show?", "What medications am I on?"
-- Understand the USER'S GOAL, not just keywords
-- Distinguish between: asking about a condition vs. having active symptoms
-- Recognize when someone needs urgent assessment vs. ongoing management
-- Multiple relevant domains may apply - return all that genuinely address the query
-- Focus on what would ACTUALLY HELP the user based on their situation
+- **discharge_simplification**: "What does this report mean?", "Summarize my discharge note", "What pills do I take?", "Make a plan for me".
+- **facility_locator_support**: "Where is the nearest clinic?", "Find a heart doctor".
 
-**Context Awareness**:
-- Pre-existing condition + management question → Treatment domains (ayush/yoga)
-- Pre-existing condition + financial need → Government schemes
-- New/changing symptoms → Symptom assessment
-- Seeking specific location → Facility locator
-- Social pleasantries within medical context → Ignore and focus on medical need
-
-Return JSON with your semantic analysis:
+Return JSON:
 {{
   "is_safe": true/false,
   "safety_reason": "brief explanation",
@@ -99,7 +71,7 @@ Return JSON with your semantic analysis:
     {{"intent": "domain", "confidence": 0.0-1.0}}
   ],
   "is_multi_domain": true/false,
-  "reasoning": "semantic analysis of user's actual need"
+  "reasoning": "semantic analysis"
 }}"""),
             ("user", "{input}")
         ])
@@ -188,44 +160,20 @@ class IntentClassifierChain_OLD:
         self.llm = llm
         self._cache = {} # Simple in-memory cache
         self.prompt_OLD = ChatPromptTemplate.from_messages([
-            ("system", """You are an intent classifier for a healthcare system. Analyze user queries and identify ALL relevant domains.
-
+            ("system", """You are an intent classifier.
 Available categories:
-1. **government_scheme_support**: Questions about government health insurance, schemes, subsidies (Ayushman Bharat, PMJAY, etc.)
-2. **mental_wellness_support**: Mental health concerns, stress, anxiety, depression, emotional well-being
-3. **ayush_support**: Traditional medicine queries (Ayurveda, Yoga, Unani, Siddha, Homeopathy, herbal treatments)
-4. **yoga_support**: Specific yoga practices, asanas, pranayama exercises
-5. **symptom_checker**: Reporting symptoms, feeling unwell, asking about health conditions
-6. **facility_locator_support**: Finding hospitals, clinics, doctors, PHCs, healthcare facilities nearby
-7. **health_advisory**: Questions about disease outbreaks, health alerts (heatwave, dengue, covid), pollution updates, or vaccination drives.
-8. **medical_calculation**: Dosage calculations, BMI, drip rates, unit conversions.
-9. **general_conversation**: Greetings, casual chat, thank you, non-healthcare queries
-
-**IMPORTANT**: 
-- For greetings (hi, hello, namaste, hey) or casual chat → general_conversation
-- For common ailments (cold, cough, headache, fever, etc.), ALWAYS include BOTH yoga_support AND ayush_support with high confidence
-- Yoga and Ayurveda are complementary - most health queries benefit from both approaches
-- If a query mentions MULTIPLE domains, return ALL of them with confidence scores
-- Confidence should be 0.0-1.0 (1.0 = highest confidence)
-- A query can have 1-3 relevant intents
-
-**Examples**:
-- "hello" → general_conversation (1.0)
-- "thank you" → general_conversation (1.0)
-- "I have a cold" → ayush_support (0.9), yoga_support (0.85)
-- "I have anxiety and want yoga and herbal remedies" → yoga_support (0.9), ayush_support (0.9), mental_wellness_support (0.8)
-- "Find hospitals near me" → facility_locator_support (1.0)
-- "Stressed and need traditional medicine" → ayush_support (0.9), yoga_support (0.85), mental_wellness_support (0.8)
-- "Headache remedy" → ayush_support (0.9), yoga_support (0.8)
+1. **discharge_simplification**
+2. **symptom_checker**
+3. **facility_locator_support**
+4. **general_conversation**
 
 Return JSON:
 {{
   "primary_intent": "main category",
   "all_intents": [
-    {{"intent": "category1", "confidence": 0.9}},
-    {{"intent": "category2", "confidence": 0.7}}
+    {{"intent": "category", "confidence": 0.9}}
   ],
-  "is_multi_domain": true/false,
+  "is_multi_domain": false,
   "reasoning": "brief explanation"
 }}"""),
             ("user", "{input}")

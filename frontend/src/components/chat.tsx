@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import VoiceRecorder from "./VoiceRecorder";
 import DocumentUploader from "./DocumentUploader";
-import { getValidToken, setupTokenRefresh, onAuthChange } from "@/lib/firebase-client";
+import { getValidToken, setupTokenRefresh, onAuthChange } from "../lib/firebase-client";
 import HealthAlertsWidget from "./HealthAlertsWidget";
 import OnboardingModal from "./onboarding/OnboardingModal";
 import { useTranslations, useLocale } from 'next-intl';
@@ -206,7 +206,7 @@ export default function HealthcareChat() {
   // --- Effects ---
   useEffect(() => {
     // Setup Firebase auth listener
-    const unsubscribe = onAuthChange(async (user) => {
+    const unsubscribe = onAuthChange(async (user: any) => {
       if (!user) {
         console.log("⚠️ No Firebase user - redirecting to login");
         router.push("/login");
@@ -534,7 +534,7 @@ export default function HealthcareChat() {
       });
       console.log("📝 [STEP 2.5] Request body object:", requestBody);
       console.log("📝 [STEP 2.6] Stringified JSON:", JSON.stringify(requestBody, null, 2));
-      
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -597,7 +597,7 @@ export default function HealthcareChat() {
 
       if (isEmergency) {
         console.log("🚨 Emergency detected!");
-        
+
         // If backend provided hospitals, display them
         if (data.nearby_hospitals && Array.isArray(data.nearby_hospitals)) {
           console.log(`✅ Backend provided ${data.nearby_hospitals.length} nearby hospitals`);
@@ -784,11 +784,11 @@ export default function HealthcareChat() {
             const R = 6371; // Radius of the Earth in km
             const dLat = (hospital.latitude - latitude) * Math.PI / 180;
             const dLon = (hospital.longitude - longitude) * Math.PI / 180;
-            const a = 
-              Math.sin(dLat/2) * Math.sin(dLat/2) +
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.cos(latitude * Math.PI / 180) * Math.cos(hospital.latitude * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             const distance = R * c;
             return { ...hospital, distance_km: distance };
           }
@@ -919,7 +919,7 @@ export default function HealthcareChat() {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           text,
           language_code: locale === 'hi' ? 'hi-IN' : 'en-IN' // Map locale to Sarvam language codes
         })
@@ -1039,6 +1039,17 @@ export default function HealthcareChat() {
 
           {/* Footer */}
           <div className="p-4 border-t border-white/10 bg-[#334f38] space-y-2">
+
+            {/* NEW: Discharge Simplifier Button */}
+            <button
+              onClick={() => router.push('/discharge')}
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+            >
+              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+                <FileText className="w-3 h-3" />
+              </div>
+              Discharge Simplifier
+            </button>
 
             {/* NEW: Profile Button */}
             <button
@@ -1350,7 +1361,7 @@ export default function HealthcareChat() {
                 {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
             </div>
-            
+
             {/* Audio Processing Indicator */}
             {isProcessingAudio && (
               <div className="px-4 pb-2">
