@@ -1,92 +1,111 @@
 """
-Specialized chain implementations for Discharge Simplification and Follow-up
+Discharge Simplification Chain - The core of the system
 """
 
-import json
-from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from ..schemas import DischargeOutputSchema
-
-class SearchBasedChain:
-    """Base class for chains that use web search"""
-    
-    def __init__(self, llm, search_tool, system_prompt: str):
-        self.llm = llm
-        self.search_tool = search_tool
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("user", "{input}")
-        ])
-    
-    def search_and_generate(self, query: str, search_query: str) -> str:
-        """Perform search and generate response"""
-        print(f"      → Searching for '{search_query}'...")
-        if self.search_tool:
-            search_results = self.search_tool.invoke(search_query)
-            print(f"      → Found {len(search_results) if isinstance(search_results, list) else 'some'} results")
-        else:
-            search_results = "No search tool configured."
-
-        print(f"      → Generating response...")
-        chain = self.prompt | self.llm | StrOutputParser()
-        response = chain.invoke({
-            "input": query,
-            "search_results": json.dumps(search_results, indent=2)
-        })
-        return response
-
-class HospitalLocatorChain(SearchBasedChain):
-    def __init__(self, llm, search_tool):
-        system_prompt = "You are a healthcare facility locator. Extract location from the query, search for nearby facilities, and list them with details.\nSearch results:\n{search_results}"
-        super().__init__(llm, search_tool, system_prompt)
-    def run(self, user_input: str) -> str:
-        search_query = f"hospitals healthcare facilities near {user_input}"
-        return self.search_and_generate(user_input, search_query)
 
 
 class DischargeSimplifierChain:
     """
-    Chain to simplify medical discharge summaries into plain language (6th-8th grade level).
+    Transform complex medical discharge summaries into plain language (6th-8th grade level).
     Generates action plans, danger signs, and follow-up schedules.
+    
+    This is the PRIMARY agent in the system.
     """
     
     def __init__(self, llm):
         self.llm = llm
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", """You are an expert Medical Discharge Instruction Simplifier. 
-Your goal is to transform complex clinical discharge notes into a clear, safer, and actionable guide for the patient.
+Your goal is to transform complex clinical discharge notes into a clear, safe, and actionable guide for the patient.
 
 **INPUT DATA:**
 - Use the provided discharge note text.
-- Optionally, incorporate general medical knowledge for public care instructions (CDC/MedlinePlus equivalent).
+- Incorporate general medical knowledge from public care instructions (CDC/MedlinePlus equivalent).
 
-**OUTPUT REQUIREMENTS (Strict JSON):**
-1. **simplified_summary**: Write a plain-language summary (6th-8th grade reading level). Avoid jargon. Explain *why* they were admitted and *what* happened, simply.
-2. **action_plan**: specific daily tasks. 
-   - Break down by "Day 1 (Today)", "Day 2", "Week 1", etc.
-   - Include specific clear actions like "Take 1 blue pill", "Change bandage", "Walk for 10 mins".
-3. **danger_signs**: List of immediate "Red Flags". If the patient sees these, they must call a doctor/911.
-4. **medication_list**: Simplified list. Format: "Name - Purpose - Usage". (e.g., "Metformin - For sugar - Take 1 with breakfast")
-5. **wound_care**: Specific instructions if mentioned.
-6. **activity_restrictions**: What they CANNOT do (e.g., "No lifting > 5 lbs").
-7. **follow_up_schedule**: Who to see and when.
-8. **lifestyle_changes**: Diet, smoking, etc.
-9. **citations**: Add general trusted sources (e.g., "See MedlinePlus on Heart Failure") if relevant to the condition.
+**OUTPUT REQUIREMENTS (Strict JSON Schema):**
+
+1. **simplified_summary** (REQUIRED):
+   - Write a plain-language summary at 6th-8th grade reading level
+   - Avoid medical jargon - use simple words
+   - Explain WHY they were admitted and WHAT happened
+   - Examples of simplification:
+     * "Edema" → "Swelling"
+     * "Utilize" → "Use"  
+     * "Ambulate" → "Walk"
+     * "Hypertension" → "High blood pressure"
+
+2. **action_plan** (REQUIRED):
+   - Break down by specific timeframes: "Day 1 (Today)", "Day 2", "Week 1", "Week 2", etc.
+   - Each day should have:
+     * **tasks**: Specific, clear actions (e.g., "Take 1 blue pill with breakfast", "Change bandage at 8 PM", "Walk for 10 minutes")
+     * **medications**: List of medications for that timeframe
+   - Be VERY specific with times and quantities
+
+3. **danger_signs** (REQUIRED):
+   - List immediate "Red Flags" that require calling doctor/911
+   - Be specific (e.g., "Fever over 101°F", "Chest pain", "Difficulty breathing")
+   - Include "Call 911 if you experience any of these"
+
+4. **medication_list** (REQUIRED):
+   - Format: "Name - Purpose - Usage"
+   - Example: "Metformin - For blood sugar - Take 1 pill with breakfast and dinner"
+   - Include ALL medications mentioned in discharge notes
+
+5. **wound_care** (OPTIONAL):
+   - Specific wound care instructions if applicable
+   - Include frequency and technique
+
+6. **activity_restrictions** (OPTIONAL):
+   - What they CANNOT do
+   - Examples: "No lifting over 5 lbs", "No driving for 2 weeks"
+
+7. **follow_up_schedule** (REQUIRED):
+   - Who to see, when, and why
+   - Format: 
+     * specialist: "Cardiologist", "Primary Care Doctor"
+     * when: "Within 1 week", "In 2 weeks"
+     * purpose: "Check heart function", "Remove stitches"
+
+8. **lifestyle_changes** (REQUIRED):
+   - Diet modifications, exercise, smoking cessation, etc.
+   - Be specific and actionable
+
+9. **citations** (REQUIRED):
+   - Add links to trusted public sources relevant to their condition
+   - Examples: "MedlinePlus: Heart Failure Care", "CDC: Diabetes Management"
 
 **TONE:**
-- Empathetic, clear, and directive.
-- Use simple words ("Use" instead of "Utilize", "Swelling" instead of "Edema").
+- Empathetic, clear, and directive
+- Use "you" language (e.g., "You should take...")
+- Be encouraging but realistic
 
 **SAFETY:**
-- If the note mentions critical values or severe conditions, highlight them in danger signs.
-- Do not make up medications not in the text.
+- If critical values or severe conditions are mentioned, highlight them in danger signs
+- Do NOT make up medications not in the text
+- If information is missing, say "Ask your doctor about..."
+
+**READABILITY:**
+- Target 6th-8th grade reading level (Flesch-Kincaid)
+- Short sentences (under 20 words)
+- Active voice
+- Common words only
 """),
             ("user", "Here are the discharge instructions/medical notes:\n\n{input_text}")
         ])
     
     def run(self, document_text: str) -> DischargeOutputSchema:
+        """
+        Process discharge document and return structured output.
+        
+        Args:
+            document_text: Raw discharge note text
+            
+        Returns:
+            DischargeOutputSchema with all required fields
+        """
         print(f"      → DischargeSimplifier: Processing {len(document_text)} chars of text...")
         
         # Use structured output for strict schema validation
@@ -96,8 +115,9 @@ Your goal is to transform complex clinical discharge notes into a clear, safer, 
         try:
             result = chain.invoke({"input_text": document_text})
             print(f"      ← Simplification complete. Summary length: {len(result.simplified_summary)}")
+            print(f"      ← Action plan has {len(result.action_plan)} days")
+            print(f"      ← {len(result.danger_signs)} danger signs identified")
             return result
         except Exception as e:
             print(f"      ❌ DischargeSimplifier failed: {e}")
-            # Return a fallback or re-raise depending on strictness
             raise e

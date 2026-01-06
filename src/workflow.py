@@ -1,107 +1,185 @@
 """
-Main healthcare workflow with optimized discharge simplification
+Discharge Simplification Workflow - Streamlined for single purpose
 """
+
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from .config import HealthcareConfig
-from .chains import (
-    GuardrailAndIntentChain,
-    DischargeSimplifierChain,
-    HospitalLocatorChain,
-    SymptomCheckerChain
-)
+from .chains import SafetyGuardrailChain, DischargeSimplifierChain
 from .schemas import DischargeOutputSchema
 
-class HealthcareWorkflow:
-    """Main workflow orchestrator for Discharge Simplification system"""
+
+class DischargeWorkflow:
+    """
+    Simplified workflow focused ONLY on discharge instruction simplification.
+    
+    This workflow:
+    1. Checks for safety/PII
+    2. Simplifies discharge instructions
+    3. Returns structured output
+    """
     
     def __init__(self, config: HealthcareConfig):
         self.config = config
         
-        # === KEY 1 (PRIMARY): Critical path ===
-        print("   -> Initializing workflows...")
-        self.guardrail_and_intent = GuardrailAndIntentChain(config.llm_primary)
-        self.symptom_chain = SymptomCheckerChain(config.llm_primary)
+        print("   → Initializing Discharge Simplification Workflow...")
         
-        # === KEY 2 (SECONDARY): specialized chains ===
+        # Safety guardrail (minimal)
+        self.safety_chain = SafetyGuardrailChain(config.llm_primary)
+        
+        # Main discharge simplifier (the core agent)
         self.discharge_chain = DischargeSimplifierChain(config.llm_secondary)
-        self.hospital_chain = HospitalLocatorChain(config.llm_secondary, config.search_tool)
         
-        print("   ✓ All chains initialized")
+        print("   ✓ Discharge workflow initialized")
 
-    async def process_discharge_document(self, text: str) -> Dict[str, Any]:
+    async def process_discharge_document(self, text: str, skip_safety_check: bool = False) -> Dict[str, Any]:
         """
-        Direct entry point for processing discharge documents.
-        Bypasses intent classification.
+        Main entry point for processing discharge documents.
+        
+        Args:
+            text: Raw discharge document text
+            skip_safety_check: If True, skip PII check (use for trusted sources)
+            
+        Returns:
+            Dictionary with simplified discharge instructions
         """
-        print(f"📄 Processing discharge document ({len(text)} chars)...")
+        print(f"\n📄 Processing discharge document ({len(text)} chars)...")
         
-        # Run safety check ONLY - skipping intent classification as we know the intent
-        # using the internal chain of GuardrailAndIntentChain if possible, or just trusting the source for now.
-        # Ideally we check for PII here if we were storing it, but for simplification we just process.
+        # Step 1: Safety check (optional)
+        if not skip_safety_check:
+            print("🛡️ [STEP 1] Safety check...")
+            safety_result = await asyncio.to_thread(self.safety_chain.check, text)
+            
+            if not safety_result.get("is_safe", True):
+                print(f"   ❌ Safety check failed: {safety_result.get('reason')}")
+                return {
+                    "error": "Safety check failed",
+                    "reason": safety_result.get("reason"),
+                    "status": "blocked"
+                }
+            print("   ✓ Safety check passed")
         
+        # Step 2: Simplify discharge instructions
+        print("📋 [STEP 2] Simplifying discharge instructions...")
         try:
-            # Run the simplification chain
-            # Run in thread executor because LangChain invoke is sync
-            result_schema = await asyncio.to_thread(self.discharge_chain.run, text)
+            result_schema: DischargeOutputSchema = await asyncio.to_thread(
+                self.discharge_chain.run, 
+                text
+            )
             
             # Convert Pydantic model to dict
-            return result_schema.dict()
+            result_dict = result_schema.dict()
+            result_dict["status"] = "success"
+            
+            print("   ✓ Simplification complete\n")
+            return result_dict
             
         except Exception as e:
-            print(f"❌ Error processing discharge document: {e}")
-            return {"error": str(e)}
+            print(f"   ❌ Error during simplification: {e}")
+            return {
+                "error": str(e),
+                "status": "failed"
+            }
 
-    async def run(self, user_input: str, query_for_classification: str, user_profile: Any = None, conversation_history: str = "", user_location: Optional[tuple] = None, response_language: str = "English") -> Dict[str, Any]:
-        """Execute the workflow based on user chat input"""
+    async def process_with_evaluation(self, text: str) -> Dict[str, Any]:
+        """
+        Process discharge document AND add evaluation metrics.
         
-        print(f"🔍 [WORKFLOW] run() called for input: '{user_input[:50]}...'")
-
-        # Step 1: Safety Check & Intent Classification
-        print("🛡️🎯 [STEP 1] Safety Check & Intent Classification...")
-        combined_result = self.guardrail_and_intent.check_and_classify(query_for_classification)
+        This adds:
+        - Readability score (Flesch-Kincaid)
+        - Completeness check
+        - Safety warning validation
         
-        if not combined_result.get("is_safe", True):
-            return {"status": "blocked", "reason": combined_result.get("safety_reason")}
+        Returns:
+            Dictionary with results + evaluation metrics
+        """
+        result = await self.process_discharge_document(text)
         
-        primary_intent = combined_result.get("primary_intent")
-        print(f"   → Primary Intent: {primary_intent}")
+        if result.get("status") != "success":
+            return result
         
-        result = {
-            "intent": primary_intent, 
-            "reasoning": combined_result.get("reasoning"), 
-            "output": None
+        # Add evaluation metrics
+        print("📊 [STEP 3] Evaluating output quality...")
+        
+        evaluation = {
+            "readability_score": self._calculate_readability(result.get("simplified_summary", "")),
+            "completeness": self._check_completeness(result),
+            "safety_warnings_present": len(result.get("danger_signs", [])) > 0,
+            "plan_usability": self._assess_plan_usability(result.get("action_plan", []))
         }
         
-        # Step 2: Route to appropriate agent
-        if primary_intent == "discharge_simplification":
-             # If user pasted text in chat, we can try to process it. 
-             # But usually this intent might trigger a prompt to upload a document.
-             if len(user_input) > 200: # heuristic: if long text, maybe it IS the note
-                 processed = await self.process_discharge_document(user_input)
-                 # Format the simplified summary for chat response
-                 summary = processed.get("simplified_summary", "")
-                 result["output"] = f"**Simplified Summary:**\n{summary}\n\n(See the 'Discharge' tab for the full action plan)"
-                 result["data"] = processed
-             else:
-                 result["output"] = "Please upload your discharge summary using the 'Discharge Simplifier' tab, or paste the text here if you'd like me to simplify it."
+        result["evaluation"] = evaluation
+        print(f"   ✓ Evaluation complete: Readability={evaluation['readability_score']:.1f}")
         
-        elif primary_intent == "facility_locator_support":
-            result["output"] = await asyncio.to_thread(self.hospital_chain.run, user_input)
-            
-        elif primary_intent == "symptom_checker":
-            # Simple symptom checker run
-            symptom_data = await asyncio.to_thread(self.symptom_chain.run, user_input)
-            if symptom_data.is_emergency:
-                result["output"] = "🚨 **POSSIBLE EMERGENCY DETECTED**\n\nBased on your symptoms, please seek immediate medical attention or go to the nearest emergency room."
-            else:
-                result["output"] = "I've noted your symptoms. Since I am an AI, I cannot provide a diagnosis. However, based on what you described, you should monitor these symptoms. If they worsen, please consult a doctor."
-                
-        elif primary_intent == "general_conversation":
-             result["output"] = "I am your Discharge Support Agent. I can help you understand your medical notes, create action plans, or find nearby clinics. How can I help?"
-             
-        else:
-            result["output"] = "I'm not sure how to help with that. I specialize in simplifying discharge instructions and finding healthcare facilities."
-
-        print("   ✓ Workflow execution complete\n")
         return result
+
+    def _calculate_readability(self, text: str) -> float:
+        """
+        Calculate Flesch-Kincaid Grade Level.
+        Target: 6-8 grade level
+        """
+        if not text:
+            return 0.0
+        
+        # Simple approximation (for production, use textstat library)
+        words = text.split()
+        sentences = text.count('.') + text.count('!') + text.count('?')
+        if sentences == 0:
+            sentences = 1
+        
+        syllables = sum(self._count_syllables(word) for word in words)
+        
+        # Flesch-Kincaid formula
+        grade_level = 0.39 * (len(words) / sentences) + 11.8 * (syllables / len(words)) - 15.59
+        return max(0, grade_level)
+
+    def _count_syllables(self, word: str) -> int:
+        """Approximate syllable count"""
+        word = word.lower()
+        vowels = 'aeiouy'
+        count = 0
+        prev_was_vowel = False
+        
+        for char in word:
+            is_vowel = char in vowels
+            if is_vowel and not prev_was_vowel:
+                count += 1
+            prev_was_vowel = is_vowel
+        
+        # Adjust for silent e
+        if word.endswith('e'):
+            count -= 1
+        
+        return max(1, count)
+
+    def _check_completeness(self, result: Dict[str, Any]) -> Dict[str, bool]:
+        """Check if all required fields are present and non-empty"""
+        return {
+            "has_summary": bool(result.get("simplified_summary")),
+            "has_action_plan": len(result.get("action_plan", [])) > 0,
+            "has_danger_signs": len(result.get("danger_signs", [])) > 0,
+            "has_medications": len(result.get("medication_list", [])) > 0,
+            "has_follow_up": len(result.get("follow_up_schedule", [])) > 0,
+            "has_citations": len(result.get("citations", [])) > 0
+        }
+
+    def _assess_plan_usability(self, action_plan: list) -> Dict[str, Any]:
+        """Assess if action plan is usable"""
+        if not action_plan:
+            return {"usable": False, "reason": "No action plan"}
+        
+        total_tasks = sum(len(day.get("tasks", [])) for day in action_plan)
+        has_specific_times = any("AM" in str(task) or "PM" in str(task) or ":" in str(task) 
+                                 for day in action_plan 
+                                 for task in day.get("tasks", []))
+        
+        return {
+            "usable": total_tasks > 0,
+            "total_days": len(action_plan),
+            "total_tasks": total_tasks,
+            "has_specific_times": has_specific_times
+        }
+
+
+# Backward compatibility alias
+HealthcareWorkflow = DischargeWorkflow
