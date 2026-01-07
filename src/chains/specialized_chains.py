@@ -121,3 +121,48 @@ Your goal is to transform complex clinical discharge notes into a clear, safe, a
         except Exception as e:
             print(f"      ❌ DischargeSimplifier failed: {e}")
             raise e
+
+
+class PatientEducationChain:
+    """
+    Suggests patient education videos and resources for recovery.
+    Replacement for the old Yoga/Exercise recommendation feature.
+    """
+    
+    def __init__(self, llm):
+        self.llm = llm
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a Patient Education Expert.
+Your goal is to find the best Search Queries to find helpful RECOVERY and REHABILITATION videos on YouTube for a patient.
+
+**INPUT:**
+- Patient's condition or procedure (e.g., "Total Knee Replacement", "Heart Failure", "Type 2 Diabetes")
+
+**OUTPUT requirements (JSON):**
+1. **search_queries**: Generate 3-5 specific, safe search queries for YouTube.
+   - Focus on: "Exercises for...", "Diet for...", "Recovery tips for...", "What to expect after..."
+   - AVOID generic "Yoga" unless specifically helpful for mobility.
+   - Example: ["Post-op knee exercises phase 1", "How to climb stairs after knee replacement", "Anti-inflammatory diet for knee pain"]
+
+2. **recovery_tips**: List 3 key quick tips for this condition.
+
+**JSON FORMAT:**
+{{
+    "search_queries": ["query1", "query2", "query3"],
+    "recovery_tips": ["tip1", "tip2", "tip3"]
+}}"""),
+            ("user", "Patient condition/context: {context}")
+        ])
+        
+    def run(self, context: str) -> Dict[str, Any]:
+        """
+        Generate video search queries for the condition.
+        """
+        from langchain_core.output_parsers import JsonOutputParser
+        
+        chain = self.prompt | self.llm | JsonOutputParser()
+        try:
+            return chain.invoke({"context": context})
+        except Exception as e:
+            print(f"Error in PatientEducationChain: {e}")
+            return {"search_queries": [f"{context} recovery exercises", f"{context} diet tips"], "recovery_tips": []}

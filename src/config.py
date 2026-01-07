@@ -137,7 +137,7 @@ class HealthcareConfig:
             
             print("   ✓ RAG Systems initialized.")
         except Exception as e:
-            print(f"   ⚠️  Could not initialize RAG system: {e}. AYUSH/Yoga agents will have limited capabilities.")
+            print(f"   ⚠️  Could not initialize RAG system: {e}")
             self.rag_retriever = None
             self.rag_retrievers = {}
             self.vector_stores = {}

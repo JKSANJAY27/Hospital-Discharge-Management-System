@@ -56,8 +56,6 @@ class Settings(BaseSettings):
     
     # Domain-specific collections for multi-agent RAG
     COLLECTION_NAMES: Dict[str, str] = Field(default={
-        "yoga": "yoga_collection",
-        "ayush": "ayush_collection",
         "mental_wellness": "mental_wellness_collection",
         "symptoms": "symptoms_collection",
         "government_schemes": "schemes_collection",

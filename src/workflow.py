@@ -6,24 +6,14 @@ import asyncio
 from typing import Dict, Any
 from pathlib import Path
 from .config import HealthcareConfig
-from .chains import SafetyGuardrailChain, DischargeSimplifierChain
+from .chains.base_chains import SafetyGuardrailChain
+from .chains.specialized_chains import DischargeSimplifierChain, PatientEducationChain
 from .schemas import DischargeOutputSchema
-# New imports
 from .document_processor.discharge_loader import DischargeLoader
 from .utils.calendar_generator import CalendarGenerator
 
-
 class DischargeWorkflow:
-    """
-    Simplified workflow focused ONLY on discharge instruction simplification.
-    
-    This workflow:
-    1. Processing file input (Loader)
-    2. Checks for safety/PII
-    3. Simplifies discharge instructions
-    4. Generates calendar reminders (ICS)
-    5. Returns structured output
-    """
+    # ... (existing docstring)
     
     def __init__(self, config: HealthcareConfig):
         self.config = config
@@ -33,8 +23,11 @@ class DischargeWorkflow:
         # Safety guardrail (minimal)
         self.safety_chain = SafetyGuardrailChain(config.llm_primary)
         
-        # Main discharge simplifier (the core agent)
+        # Main discharge simplifier
         self.discharge_chain = DischargeSimplifierChain(config.llm_secondary)
+
+        # Video/Education Chain (New)
+        self.education_chain = PatientEducationChain(config.llm_secondary)
         
         print("   ✓ Discharge workflow initialized")
 
@@ -49,23 +42,45 @@ class DischargeWorkflow:
     ) -> Dict[str, Any]:
         """
         Main chat entry point.
-        Added for compatibility with api_mongodb.py which expects a 'run' method.
         """
         print(f"\n💬 Chat Request: {user_input}")
         
-        # Simple fallback response using the LLM directly
-        # since the full RAG workflow was replaced by the Discharge workflow.
+        intent = "general_chat"
+        video_resources = None
+        
+        # Simple keyword detection for education/video intent
+        keywords = ["video", "youtube", "exercise", "rehab", "recovery", "workout", "physio"]
+        if any(k in user_input.lower() for k in keywords):
+            print("   → Detected Patient Education/Video intent")
+            intent = "patient_education"
+            try:
+                edu_result = await asyncio.to_thread(self.education_chain.run, user_input)
+                video_resources = edu_result
+            except Exception as e:
+                print(f"   ⚠️ Education chain failed: {e}")
         
         messages = [
-            ("system", "You are a helpful healthcare assistant named Swastha. You help users with discharge instructions and general health queries."),
+            ("system", "You are a helpful healthcare assistant named Swastha. You help users with discharge instructions, recovery advice, and general health queries."),
             ("user", user_input)
         ]
         
         response = await self.config.llm_primary.ainvoke(messages)
+        output_text = response.content
+        
+        # Append video recommendations to text if found
+        if video_resources and video_resources.get("search_queries"):
+            output_text += "\n\n**Recommended Recovery Videos (YouTube):**\n"
+            for q in video_resources["search_queries"]:
+                output_text += f"- [{q}](https://www.youtube.com/results?search_query={q.replace(' ', '+')})\n"
+            
+            if video_resources.get("recovery_tips"):
+                 output_text += "\n**Quick Recovery Tips:**\n"
+                 for tip in video_resources["recovery_tips"]:
+                     output_text += f"- {tip}\n"
         
         return {
-            "output": response.content,
-            "intent": "general_chat",
+            "output": output_text,
+            "intent": intent,
             "confidence": 1.0,
             "sources": [],
             "nearby_hospitals": None, 
