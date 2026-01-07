@@ -143,7 +143,13 @@ Return JSON:
             return extraction
         
         # Analyze with LLM
+        print(f"🔍 Starting LLM analysis for file (length: {len(extraction['full_text'])} chars)...")
         analysis = self.analyze_medical_document(extraction["full_text"])
+        print(f"✅ LLM Analysis result: {analysis.keys()}")
+        if analysis.get("analyzed"):
+             print(f"   Summary: {analysis.get('summary')}")
+        else:
+             print(f"   Analysis failed: {analysis.get('error')}")
         
         return {
             **extraction,

@@ -2,17 +2,19 @@
 Test script for Discharge Simplification System
 
 This demonstrates:
-1. Processing a sample discharge note
+1. Loading a discharge summary from a file
 2. Generating simplified instructions
-3. Evaluating output quality
+3. Creating a calendar reminder file (.ics)
+4. Evaluating output quality
 """
 
 import asyncio
 import sys
 import os
+from pathlib import Path
 
 # Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.config import HealthcareConfig
 from src.workflow import DischargeWorkflow
@@ -80,10 +82,18 @@ async def main():
     workflow = DischargeWorkflow(config)
     print()
     
-    # Process discharge note
-    print("Processing sample discharge note...")
+    # Create a temporary sample file
+    sample_file_path = "sample_discharge_note.txt"
+    with open(sample_file_path, "w", encoding="utf-8") as f:
+        f.write(SAMPLE_DISCHARGE_NOTE)
+    print(f"📝 Created sample file: {sample_file_path}")
+    
+    # Process discharge note from file
+    print("Processing discharge note from file...")
     print("-" * 80)
-    result = await workflow.process_with_evaluation(SAMPLE_DISCHARGE_NOTE)
+    
+    # Use the new process_file method
+    result = await workflow.process_file(sample_file_path)
     print()
     
     # Display results
@@ -131,22 +141,18 @@ async def main():
             print(f"    When: {appt['when']}")
             print(f"    Why: {appt['purpose']}")
             print()
+            
+        # 6. ICS File Generation
+        if "ics_content" in result:
+            ics_filename = "patient_schedule.ics"
+            with open(ics_filename, "w", encoding="utf-8") as f:
+                f.write(result["ics_content"])
+            print(f"📅 CALENDAR FILE GENERATED: {ics_filename}")
+            print(f"   (You can open this in Outlook/Google Calendar)")
+            print("-" * 80)
+            print()
         
-        # 6. Lifestyle Changes
-        print("🥗 LIFESTYLE CHANGES:")
-        print("-" * 80)
-        for change in result["lifestyle_changes"]:
-            print(f"  • {change}")
-        print()
-        
-        # 7. Citations
-        print("📚 TRUSTED SOURCES FOR MORE INFORMATION:")
-        print("-" * 80)
-        for citation in result["citations"]:
-            print(f"  • {citation}")
-        print()
-        
-        # 8. Evaluation Metrics
+        # 7. Evaluation Metrics
         if "evaluation" in result:
             eval_data = result["evaluation"]
             print("=" * 80)
@@ -162,15 +168,20 @@ async def main():
             print()
             print("  Plan Usability:")
             usability = eval_data['plan_usability']
-            print(f"    Total Days: {usability['total_days']}")
-            print(f"    Total Tasks: {usability['total_tasks']}")
-            print(f"    Has Specific Times: {'✅ Yes' if usability['has_specific_times'] else '❌ No'}")
+            print(f"    Total Days: {usability.get('total_days', 0)}")
+            print(f"    Total Tasks: {usability.get('total_tasks', 0)}")
+            print(f"    Has Specific Times: {'✅ Yes' if usability.get('has_specific_times') else '❌ No'}")
             print()
         
     else:
         print("❌ FAILED!")
         print(f"Error: {result.get('error')}")
         print(f"Reason: {result.get('reason')}")
+        
+    # Cleanup
+    if os.path.exists(sample_file_path):
+        os.remove(sample_file_path)
+        print(f"🗑️  Cleaned up temporary file: {sample_file_path}")
 
 
 if __name__ == "__main__":

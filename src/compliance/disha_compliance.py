@@ -136,7 +136,7 @@ class MedicalBlockchainAuditor:
         ).hexdigest()
         
         # Log to blockchain
-        if self.blockchain.enabled:
+        if self.blockchain and self.blockchain.enabled:
             result = await self.blockchain.log_action(
                 user_id=anonymous_id,
                 action='DIAGNOSIS',
@@ -173,7 +173,7 @@ class MedicalBlockchainAuditor:
             json.dumps(audit_record, sort_keys=True).encode()
         ).hexdigest()
         
-        if self.blockchain.enabled:
+        if self.blockchain and self.blockchain.enabled:
             result = await self.blockchain.log_action(
                 user_id=anonymous_id,
                 action='PRESCRIPTION',
@@ -204,7 +204,7 @@ class MedicalBlockchainAuditor:
             'timestamp': datetime.utcnow().isoformat()
         }
         
-        if self.blockchain.enabled:
+        if self.blockchain and self.blockchain.enabled:
             result = await self.blockchain.log_action(
                 user_id=anonymous_id,
                 action='DATA_ACCESS',

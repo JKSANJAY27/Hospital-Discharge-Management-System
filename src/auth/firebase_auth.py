@@ -78,7 +78,7 @@ def verify_firebase_token(id_token: str, clock_skew_seconds: int = 10) -> Option
         print(f"✓ Token verified for user: {decoded_token.get('email')}")
         return decoded_token
     except Exception as e:
-        print(f"❌ Token verification failed: {e}")
-        import traceback
-        traceback.print_exc()
+        # It's common for this to fail if the token is a Custom JWT (not Firebase)
+        # We process this silently or with a debug log to allow fallback methods to work
+        # print(f"ℹ️ Firebase token verification failed (likely Custom JWT): {e}") 
         return None

@@ -3,8 +3,9 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
+import os
 # Configuration
-SECRET_KEY = "your-secret-key-for-hackathon-demo-only"
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-hackathon-demo-only")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

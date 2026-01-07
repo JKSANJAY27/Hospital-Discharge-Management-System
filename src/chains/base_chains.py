@@ -44,7 +44,7 @@ Check if the input contains:
 
 **IMPORTANT:**
 - Medical conditions, symptoms, and health information are SAFE and expected.
-- Return JSON: {"is_safe": true/false, "reason": "explanation"}
+- Return JSON: {{"is_safe": true/false, "reason": "explanation"}}
 """),
             ("user", "{input}")
         ])

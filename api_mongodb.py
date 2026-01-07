@@ -227,8 +227,14 @@ class MessageResponse(BaseModel):
 
 # Helper Functions
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    """Get current user from Firebase token (no JWT)"""
+    """
+    Get current user. Supports both:
+    1. Firebase ID Token (Google Login)
+    2. Custom JWT (Email/Password Login)
+    """
     from src.auth.firebase_auth import verify_firebase_token
+    from jose import jwt, JWTError
+    from src.auth.security import SECRET_KEY, ALGORITHM
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -236,29 +242,43 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    user = None
+    
+    # 1. Try verifying as Firebase Token first
     try:
         # Verify Firebase token directly (run in thread to prevent blocking)
+        # We suppress print output here to avoid spamming logs on fallback
         decoded_token = await asyncio.to_thread(verify_firebase_token, token, clock_skew_seconds=10)
-        if not decoded_token:
-            raise credentials_exception
         
-        firebase_uid = decoded_token.get("uid")
-        if not firebase_uid:
+        if decoded_token:
+            firebase_uid = decoded_token.get("uid")
+            if firebase_uid:
+                logger.info(f"🔍 Looking for user with firebase_uid: {firebase_uid}")
+                user = await mongodb_manager.db.users.find_one({"firebase_uid": firebase_uid})
+    except Exception as firebase_error:
+        # Not a valid Firebase token, likely a Custom JWT or invalid
+        pass
+
+    # 2. If Firebase auth failed, try Custom JWT (Email/Password)
+    if not user:
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            email_hash = payload.get("sub")
+            if email_hash is None:
+                raise credentials_exception
+            
+            logger.info(f"🔍 Looking for user with email_hash: {email_hash[:10]}...")
+            user = await mongodb_manager.db.users.find_one({"email_hash": email_hash})
+        except JWTError as jwt_error:
+            # Both methods failed
+            logger.warning(f"❌ Auth failed: Not a valid Firebase token and Custom JWT decode failed: {jwt_error}")
             raise credentials_exception
-        
-        logger.info(f"🔍 Looking for user with firebase_uid: {firebase_uid}")
-    except Exception as e:
-        logger.error(f"Token verification error: {e}")
-        raise credentials_exception
-    
-    # Find user by firebase_uid
-    user = await mongodb_manager.db.users.find_one({"firebase_uid": firebase_uid})
+
     if user is None:
-        logger.error(f"❌ User not found for firebase_uid: {firebase_uid}")
+        logger.error(f"❌ User not found in database")
         raise credentials_exception
     
-    logger.info(f"✅ Found user: {user.get('firebase_uid')}")
-    return user
+    logger.info(f"✅ User authenticated successfully: {user.get('_id')}")
     return user
 
 async def background_blockchain_log(log_id: ObjectId, user_id: ObjectId, action: str, resource_type: str, resource_id: Optional[ObjectId]):
