@@ -60,3 +60,8 @@ sarvamai
 pydub
 
 sarvamai
+
+# Agent Lightning (Training & Optimization)
+
+# Fixed Dependencies
+numpy<2

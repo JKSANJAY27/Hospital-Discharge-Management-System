@@ -1,9 +1,13 @@
 """
 Discharge Simplification Workflow - Streamlined for single purpose
+
+Agent Lightning Integration:
+- Set use_agent_lightning=True to enable span tracing for training
+- Rewards are emitted for evaluation metrics (readability, completeness, safety)
 """
 
 import asyncio
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pathlib import Path
 from .config import HealthcareConfig
 from .chains.base_chains import SafetyGuardrailChain
@@ -12,13 +16,34 @@ from .schemas import DischargeOutputSchema
 from .document_processor.discharge_loader import DischargeLoader
 from .utils.calendar_generator import CalendarGenerator
 
+# Optional Agent Lightning integration
+# Note: On Windows, some Agent Lightning features may be limited due to gunicorn's Unix dependency
+try:
+    import agentlightning as agl
+    AGENT_LIGHTNING_AVAILABLE = True
+except (ImportError, ModuleNotFoundError) as e:
+    AGENT_LIGHTNING_AVAILABLE = False
+    agl = None
+    # Don't print warning during normal import - only when explicitly trying to use it
+    _AGENT_LIGHTNING_IMPORT_ERROR = str(e)
+
+
 class DischargeWorkflow:
-    # ... (existing docstring)
+    """
+    Main workflow for discharge instruction simplification.
     
-    def __init__(self, config: HealthcareConfig):
+    Agent Lightning Integration:
+        When use_agent_lightning=True, the workflow emits rewards and traces
+        that can be used for training with APO or RL algorithms.
+    """
+    
+    def __init__(self, config: HealthcareConfig, use_agent_lightning: bool = False):
         self.config = config
+        self.use_agent_lightning = use_agent_lightning and AGENT_LIGHTNING_AVAILABLE
         
         print("   → Initializing Discharge Simplification Workflow...")
+        if self.use_agent_lightning:
+            print("   → Agent Lightning integration ENABLED")
         
         # Safety guardrail (minimal)
         self.safety_chain = SafetyGuardrailChain(config.llm_primary)
@@ -193,7 +218,49 @@ class DischargeWorkflow:
         result["evaluation"] = evaluation
         print(f"   ✓ Evaluation complete: Readability={evaluation['readability_score']:.1f}")
         
+        # Agent Lightning: Emit reward for training if enabled
+        if self.use_agent_lightning and agl is not None:
+            # Calculate composite reward score [0, 1]
+            reward = self._calculate_training_reward(evaluation)
+            agl.emit_reward(reward, attributes={
+                "readability_score": evaluation["readability_score"],
+                "safety_warnings_present": evaluation["safety_warnings_present"],
+                "completeness_ratio": sum(1 for v in evaluation["completeness"].values() if v) / len(evaluation["completeness"]),
+            })
+            print(f"   📊 Agent Lightning reward emitted: {reward:.3f}")
+        
         return result
+    
+    def _calculate_training_reward(self, evaluation: Dict[str, Any]) -> float:
+        """
+        Calculate a training reward [0, 1] from evaluation metrics.
+        
+        Scoring:
+        - Readability (0-0.3): Target 6-8 grade level
+        - Completeness (0-0.4): All required fields present
+        - Safety (0-0.3): Danger signs identified
+        """
+        reward = 0.0
+        
+        # Readability score (target 6-8)
+        readability = evaluation.get("readability_score", 12)
+        if 6 <= readability <= 8:
+            reward += 0.3
+        elif 4 <= readability <= 10:
+            reward += 0.2
+        elif 2 <= readability <= 12:
+            reward += 0.1
+        
+        # Completeness score
+        completeness = evaluation.get("completeness", {})
+        fields_present = sum(1 for v in completeness.values() if v)
+        reward += (fields_present / max(len(completeness), 1)) * 0.4
+        
+        # Safety score
+        if evaluation.get("safety_warnings_present"):
+            reward += 0.3
+        
+        return min(1.0, reward)
 
     def _calculate_readability(self, text: str) -> float:
         """
