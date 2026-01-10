@@ -1,0 +1,77 @@
+/* Hand-drawn Comic/Sketch Theme */
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(3deg); }
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+
+@keyframes pulse-sketch {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes draw-line {
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes bounce-in {
+  0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+  50% { transform: scale(1.05) rotate(5deg); }
+  70% { transform: scale(0.9) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* Sketch filter for hand-drawn effect */
+.sketch-shadow {
+  filter: drop-shadow(3px 3px 0px rgba(0, 0, 0, 0.2)) 
+          drop-shadow(-1px -1px 0px rgba(255, 255, 255, 0.5));
+}
+
+.sketch-border {
+  border: 3px solid currentColor;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  position: relative;
+}
+
+.sketch-border::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px dashed currentColor;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  opacity: 0.3;
+}
+
+/* Wobbly hand-drawn animations */
+.float-sketch {
+  animation: float 6s ease-in-out infinite;
+}
+
+.wiggle-sketch {
+  animation: wiggle 2s ease-in-out infinite;
+}
+
+/* Comic book style dots/halftone background */
+.comic-dots {
+  background-image: 
+    radial-gradient(circle, #3A5A40 1px, transparent 1px),
+    radial-gradient(circle, #A3B18A 1px, transparent 1px);
+  background-size: 40px 40px, 60px 60px;
+  background-position: 0 0, 30px 30px;
+  opacity: 0.08;
+}
+
+/* Hand-drawn doodles */
+.doodle-heart {
+  animation: pulse-sketch 2s ease-in-out infinite;
+}
+
+.doodle-star {
+  animation: wiggle 3s ease-in-out infinite;
+}

@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import {
   Leaf, Send, Sparkles, Loader2, Plus, MessageCircle,
   LogOut, Menu, X, Volume2, Pause, Play, ChevronLeft,
-  ChevronRight, Youtube, Activity, User, Bell, FileText, MapPin
+  ChevronRight, Youtube, Activity, User, Bell, FileText, MapPin, CheckCircle2
 } from 'lucide-react';
 import VoiceRecorder from "./VoiceRecorder";
 import DocumentUploader from "./DocumentUploader";
@@ -15,6 +15,8 @@ import HealthAlertsWidget from "./HealthAlertsWidget";
 import OnboardingModal from "./onboarding/OnboardingModal";
 import { useTranslations, useLocale } from 'next-intl';
 import LanguageSwitcher from './LanguageSwitcher';
+import SketchBackground from './sketch/SketchBackground';
+import '@/styles/sketch.css';
 
 // --- Types ---
 type Message = {
@@ -847,6 +849,90 @@ export default function HealthcareChat() {
     });
   };
 
+  // Format extracted medical data for display
+  const formatExtractedData = (data: any): React.ReactNode => {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-green-700 font-semibold">
+          <CheckCircle2 className="h-5 w-5" />
+          <span>Medical Document Processed</span>
+        </div>
+        
+        {data.patient_name && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Patient:</span>{' '}
+            <span className="text-stone-700">{data.patient_name}</span>
+          </div>
+        )}
+        
+        {data.doctor_name && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Doctor:</span>{' '}
+            <span className="text-stone-700">{data.doctor_name}</span>
+          </div>
+        )}
+        
+        {data.date && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Date:</span>{' '}
+            <span className="text-stone-700">{data.date}</span>
+          </div>
+        )}
+        
+        {data.diagnosis && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Diagnosis:</span>{' '}
+            <span className="text-stone-700">{data.diagnosis}</span>
+          </div>
+        )}
+        
+        {data.medications && data.medications.length > 0 && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Medications:</span>
+            <ul className="ml-5 mt-2 space-y-1 list-disc">
+              {data.medications.map((med: any, idx: number) => (
+                <li key={idx} className="text-stone-700">
+                  <strong>{med.name || med}</strong>
+                  {med.dosage && <span className="text-stone-600"> - {med.dosage}</span>}
+                  {med.frequency && <span className="text-stone-600"> ({med.frequency})</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        {data.instructions && (
+          <div className="text-sm">
+            <span className="font-semibold text-stone-800">Instructions:</span>
+            <p className="text-stone-700 mt-1">{data.instructions}</p>
+          </div>
+        )}
+        
+        {data.recovery_plan && (
+          <div className="mt-4 p-4 bg-purple-50 border-2 border-purple-300 rounded-lg">
+            <div className="flex items-center gap-2 text-purple-900 font-bold mb-2">
+              <span className="text-xl">📋</span>
+              <span>Recovery Plan Generated!</span>
+            </div>
+            <p className="text-sm text-purple-800 mb-3">
+              A personalized recovery plan has been created with daily tasks, medication schedules, and safety guidelines.
+            </p>
+            <button
+              onClick={() => window.location.href = `/${locale}/recovery-plans`}
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              📋 View My Recovery Plan
+            </button>
+          </div>
+        )}
+        
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+          💬 You can now ask me questions about this {data.document_type || 'prescription'} or document!
+        </div>
+      </div>
+    );
+  };
+
   // --- Audio Player Logic ---
   const playResponse = async (text: string, index: number) => {
     if (playingMessageIndex === index) {
@@ -960,10 +1046,22 @@ export default function HealthcareChat() {
           {/* Sidebar Header */}
           <div className="p-6 flex items-center justify-between border-b border-white/10">
             <div className="flex items-center gap-3">
-              <div className="bg-white/10 p-2 rounded-lg">
+              <div 
+                className="bg-white/10 p-2"
+                style={{
+                  borderRadius: '15px 5px 15px 5px/5px 15px 5px 15px'
+                }}
+              >
                 <Activity className="w-5 h-5 text-emerald-200" />
               </div>
-              <span className="font-serif font-bold text-xl text-[#F2E8CF]">Discharge Agent</span>
+              <span 
+                className="font-bold text-xl text-[#F2E8CF]"
+                style={{
+                  fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive'
+                }}
+              >
+                Discharge Agent
+              </span>
             </div>
             <button onClick={() => setIsMobileSidebarOpen(false)} className="md:hidden text-white/70 hover:text-white">
               <X className="w-6 h-6" />
@@ -974,7 +1072,20 @@ export default function HealthcareChat() {
           <div className="p-4">
             <button
               onClick={createNewSession}
-              className="w-full flex items-center justify-center gap-2 bg-[#F2E8CF] hover:bg-white text-[#3A5A40] px-4 py-3 rounded-xl transition-all shadow-md hover:shadow-lg font-bold"
+              className="w-full flex items-center justify-center gap-2 bg-[#F2E8CF] hover:bg-white text-[#3A5A40] px-4 py-3 transition-all font-black uppercase tracking-wide text-sm"
+              style={{
+                borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                border: '3px solid rgba(255,255,255,0.3)',
+                boxShadow: '4px 4px 0px rgba(0, 0, 0, 0.2)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translate(-2px, -2px)';
+                e.currentTarget.style.boxShadow = '6px 6px 0px rgba(0, 0, 0, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translate(0, 0)';
+                e.currentTarget.style.boxShadow = '4px 4px 0px rgba(0, 0, 0, 0.2)';
+              }}
             >
               <Plus className="w-5 h-5" />
               <span>{tNav('newConsultation')}</span>
@@ -983,33 +1094,60 @@ export default function HealthcareChat() {
 
           {/* Session List */}
           <div className="flex-1 overflow-y-auto px-4 py-2 space-y-2 scrollbar-thin scrollbar-thumb-white/20">
-            <h3 className="text-xs font-semibold text-emerald-200/70 uppercase tracking-widest mb-2 px-2">{tNav('history')}</h3>
+            <h3 
+              className="text-xs font-black text-emerald-200 uppercase tracking-widest mb-3 px-2"
+              style={{
+                fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+                textShadow: '2px 2px 0px rgba(0,0,0,0.3)'
+              }}
+            >{tNav('history')}</h3>
             {(Array.isArray(sessions) ? sessions : []).map((session) => (
               <button
                 key={session.id}
                 onClick={() => loadSession(session.id)}
-                className={`w-full text-left px-4 py-3 rounded-xl text-sm flex items-center gap-3 transition-all border border-transparent
+                className={`w-full text-left px-4 py-3 text-sm flex items-center gap-3 transition-all font-medium
                   ${currentSessionId === session.id
-                    ? 'bg-white/10 text-white border-white/10 shadow-sm'
-                    : 'text-stone-300 hover:bg-white/5 hover:text-white'
+                    ? 'bg-white/20 text-white'
+                    : 'text-stone-300 hover:bg-white/10 hover:text-white'
                   }`}
+                style={{
+                  borderRadius: currentSessionId === session.id 
+                    ? '225px 15px 225px 15px/15px 255px 15px 225px'
+                    : '15px 225px 15px 225px/225px 15px 255px 15px',
+                  border: currentSessionId === session.id ? '2px solid rgba(255,255,255,0.4)' : '2px solid transparent',
+                  boxShadow: currentSessionId === session.id ? '3px 3px 0px rgba(0,0,0,0.2)' : 'none',
+                  fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive'
+                }}
               >
-                <MessageCircle className="w-4 h-4 shrink-0 opacity-70" />
+                <MessageCircle className="w-5 h-5 shrink-0 opacity-70" />
                 <span className="truncate">{session.title}</span>
               </button>
             ))}
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-white/10 bg-[#334f38] space-y-2">
+          <div className="p-4 border-t-2 border-white/20 bg-[#334f38] space-y-2">
 
             {/* NEW: Discharge Simplifier Button */}
             <button
               onClick={() => router.push('/discharge')}
-              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 transition-colors text-sm font-medium"
+              style={{
+                borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
-              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                <FileText className="w-3 h-3" />
+              <div 
+                className="w-6 h-6 bg-white/20 flex items-center justify-center"
+                style={{ borderRadius: '15px 5px 15px 5px/5px 15px 5px 15px' }}
+              >
+                <FileText className="w-4 h-4" />
               </div>
               Discharge Simplifier
             </button>
@@ -1017,10 +1155,23 @@ export default function HealthcareChat() {
             {/* NEW: Profile Button */}
             <button
               onClick={() => router.push('/profile')}
-              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 transition-colors text-sm font-medium"
+              style={{
+                borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
-              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                <User className="w-3 h-3" />
+              <div 
+                className="w-6 h-6 bg-white/20 flex items-center justify-center"
+                style={{ borderRadius: '5px 15px 5px 15px/15px 5px 15px 5px' }}
+              >
+                <User className="w-4 h-4" />
               </div>
               {tNav('myProfile')}
             </button>
@@ -1028,9 +1179,22 @@ export default function HealthcareChat() {
             {/* NEW: Blockchain Audit Button */}
             <button
               onClick={() => router.push('/blockchain')}
-              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-white hover:bg-white/10 px-4 py-3 transition-colors text-sm font-medium"
+              style={{
+                borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
-              <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
+              <div 
+                className="w-6 h-6 bg-white/20 flex items-center justify-center"
+                style={{ borderRadius: '15px 5px 15px 5px/5px 15px 5px 15px' }}
+              >
                 🔗
               </div>
               {tNav('blockchainAudit')}
@@ -1039,9 +1203,19 @@ export default function HealthcareChat() {
             {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 text-stone-300 hover:text-red-300 hover:bg-red-500/10 px-4 py-3 rounded-lg transition-colors text-sm font-medium"
+              className="w-full flex items-center gap-3 text-stone-300 hover:text-red-300 hover:bg-red-500/10 px-4 py-3 transition-colors text-sm font-medium"
+              style={{
+                borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-5 h-5" />
               {tNav('signOut')}
             </button>
           </div>
@@ -1053,19 +1227,39 @@ export default function HealthcareChat() {
 
         {/* Top Navbar */}
         {/* Top Navbar */}
-        <header className="bg-white border-b border-stone-200 h-14 sm:h-16 flex items-center px-3 sm:px-4 justify-between shadow-sm z-10">
+        <header className="bg-white h-14 sm:h-16 flex items-center px-3 sm:px-4 justify-between z-10 relative border-b-3 border-[#3A5A40]/20">
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Sidebar Toggles */}
             <button
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="md:hidden p-1.5 sm:p-2 text-stone-600 hover:bg-stone-100 rounded-lg"
+              className="md:hidden p-1.5 sm:p-2 text-stone-600 hover:bg-stone-100 transition-colors"
+              style={{
+                borderRadius: '15px 5px 15px 5px/5px 15px 5px 15px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#3A5A40';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="hidden md:flex p-2 text-stone-500 hover:text-[#3A5A40] hover:bg-stone-100 rounded-lg transition-colors"
+              className="hidden md:flex p-2 text-stone-500 hover:text-[#3A5A40] hover:bg-stone-100 transition-colors"
+              style={{
+                borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#3A5A40';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
             >
               {isSidebarOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
             </button>
@@ -1119,10 +1313,12 @@ export default function HealthcareChat() {
         </header>
 
         {/* Chat Messages Area */}
-        <div className="flex-1 overflow-hidden relative bg-[url('https://www.transparenttextures.com/patterns/cream-paper.png')]">
-          {/* Optional: You can remove the bg-url if you prefer plain color, or add a subtle pattern */}
-
-          <div className="h-full max-w-4xl mx-auto px-4 md:px-8 py-6 overflow-y-auto scrollbar-thin">
+        <div className="flex-1 overflow-hidden relative">
+          <div className="absolute inset-0 bg-[#FDFCF8]">
+            <SketchBackground />
+          </div>
+          
+          <div className="h-full max-w-4xl mx-auto px-4 md:px-8 py-6 overflow-y-auto scrollbar-thin relative z-10">
 
             {/* Pending Request Warning */}
             {showPendingWarning && pendingRequests.size > 0 && (
@@ -1148,12 +1344,25 @@ export default function HealthcareChat() {
             {
               messages.length === 0 && !currentSessionId && (
                 <div className="flex flex-col items-center justify-center h-[80%] text-center space-y-6 animate-in fade-in duration-700">
-                  <div className="w-24 h-24 bg-[#E0E5D9] rounded-full flex items-center justify-center mb-4 shadow-inner">
+                  <div 
+                    className="w-24 h-24 bg-[#E0E5D9] flex items-center justify-center mb-4 wiggle-sketch"
+                    style={{
+                      borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                      border: '4px solid #3A5A40',
+                      boxShadow: '6px 6px 0px rgba(58, 90, 64, 0.3)'
+                    }}
+                  >
                     <Activity className="w-12 h-12 text-[#3A5A40]" />
                   </div>
                   <div>
-                    <h2 className="text-3xl font-serif font-bold text-[#3A5A40] mb-2">{t('swastha')}</h2>
-                    <p className="text-stone-500 max-w-md mx-auto">
+                    <h2 
+                      className="text-3xl font-bold text-[#3A5A40] mb-2"
+                      style={{
+                        fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+                        textShadow: '3px 3px 0px rgba(163, 177, 138, 0.3)'
+                      }}
+                    >{t('swastha')}</h2>
+                    <p className="text-stone-600 max-w-md mx-auto font-medium">
                       {t('healthQuote')}
                     </p>
                   </div>
@@ -1162,7 +1371,22 @@ export default function HealthcareChat() {
                       <button
                         key={i}
                         onClick={() => handleSubmit(q)}
-                        className="text-sm bg-white border border-stone-200 p-3 rounded-xl hover:border-[#3A5A40] hover:text-[#3A5A40] hover:shadow-md transition-all text-stone-600"
+                        className="text-sm bg-white p-3 hover:text-[#3A5A40] transition-all text-stone-600 font-medium"
+                        style={{
+                          borderRadius: i % 2 === 0 ? '225px 15px 225px 15px/15px 255px 15px 225px' : '15px 225px 15px 225px/225px 15px 255px 15px',
+                          border: '3px solid #d6d3d1',
+                          boxShadow: '3px 3px 0px rgba(0,0,0,0.1)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = '#3A5A40';
+                          e.currentTarget.style.transform = 'translate(-2px, -2px)';
+                          e.currentTarget.style.boxShadow = '5px 5px 0px rgba(58, 90, 64, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = '#d6d3d1';
+                          e.currentTarget.style.transform = 'translate(0, 0)';
+                          e.currentTarget.style.boxShadow = '3px 3px 0px rgba(0,0,0,0.1)';
+                        }}
                       >
                         {q}
                       </button>
@@ -1180,12 +1404,17 @@ export default function HealthcareChat() {
                   <div className={`flex gap-2 sm:gap-4 max-w-[95%] sm:max-w-[90%] md:max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
 
                     {/* Avatar */}
-                    <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm border
+                    <div className={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shrink-0 border-3
                       ${msg.role === 'assistant'
-                        ? 'bg-[#E0E5D9] border-[#3A5A40]/20'
-                        : 'bg-[#3A5A40] border-[#3A5A40]'
+                        ? 'bg-[#E0E5D9] border-[#3A5A40]'
+                        : 'bg-[#3A5A40] border-[#2F4A33]'
                       }`}
-
+                      style={{
+                        borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                        border: '3px solid',
+                        borderColor: msg.role === 'assistant' ? '#3A5A40' : '#2F4A33',
+                        boxShadow: '3px 3px 0px rgba(0,0,0,0.2)'
+                      }}
                     >
                       {msg.role === 'assistant' ? (
                         <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-[#3A5A40]" />
@@ -1212,12 +1441,21 @@ export default function HealthcareChat() {
 
                     {/* Bubble */}
                     <div className={`
-                      rounded-2xl p-3 sm:p-5 shadow-sm relative group transition-all
+                      p-3 sm:p-5 relative group transition-all
                       ${msg.role === 'user'
-                        ? 'bg-[#3A5A40] text-white rounded-tr-none' // User Bubble
-                        : 'bg-white text-stone-800 border border-stone-100 rounded-tl-none hover:shadow-organic' // Bot Bubble
+                        ? 'bg-[#3A5A40] text-white' // User Bubble
+                        : 'bg-white text-stone-800 border-[#3A5A40]' // Bot Bubble
                       }
-                    `}>
+                    `}
+                    style={{
+                      borderRadius: msg.role === 'user' 
+                        ? '255px 25px 15px 225px/25px 225px 255px 15px'
+                        : '15px 255px 225px 25px/255px 15px 25px 225px',
+                      border: msg.role === 'user' ? '3px solid #2F4A33' : '3px solid #3A5A40',
+                      boxShadow: msg.role === 'user'
+                        ? '5px 5px 0px rgba(0,0,0,0.2), -2px -2px 0px rgba(255,255,255,0.1)'
+                        : '5px 5px 0px rgba(58,90,64,0.15), -2px -2px 0px rgba(163,177,138,0.2)'
+                    }}>
                       <div className="text-sm sm:text-[15px] leading-6 sm:leading-7">
                         {msg.content}
                       </div>
@@ -1274,7 +1512,7 @@ export default function HealthcareChat() {
         </div >
 
         {/* Input Area */}
-        <div className="bg-white border-t border-stone-200 px-3 sm:px-4 py-3 sm:py-5 pb-4 sm:pb-6">
+        <div className="bg-white px-3 sm:px-4 py-3 sm:py-5 pb-4 sm:pb-6 relative border-t-3 border-[#3A5A40]/20">
           <div className="max-w-4xl mx-auto flex items-end gap-2 sm:gap-3">
 
             <div className="relative flex-1 group">
@@ -1284,7 +1522,20 @@ export default function HealthcareChat() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSubmit()}
-                className="w-full pl-4 sm:pl-6 pr-4 py-3 sm:py-4 rounded-2xl bg-stone-50 border border-stone-200 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] text-stone-800 placeholder:text-stone-400 transition-all shadow-inner text-sm sm:text-base"
+                className="w-full pl-4 sm:pl-6 pr-4 py-3 sm:py-4 bg-white text-stone-800 placeholder:text-stone-400 transition-all text-sm sm:text-base font-medium focus:outline-none"
+                style={{
+                  border: '3px solid #d6d3d1',
+                  borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                  boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.05)'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#3A5A40';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(58, 90, 64, 0.1), inset 2px 2px 4px rgba(0,0,0,0.05)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#d6d3d1';
+                  e.target.style.boxShadow = 'inset 2px 2px 4px rgba(0,0,0,0.05)';
+                }}
                 placeholder={t('askPlaceholder')}
                 disabled={isLoading}
               />
@@ -1293,10 +1544,28 @@ export default function HealthcareChat() {
             <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => setShowDocumentUpload(true)}
-                className="p-3 sm:p-4 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-full transition-all shadow-md hover:shadow-lg active:scale-95"
+                className="p-3 sm:p-4 bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all active:scale-95"
+                style={{
+                  borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                  border: '3px solid #d6d3d1',
+                  boxShadow: '3px 3px 0px rgba(0,0,0,0.1)'
+                }}
                 title="Upload medical document"
               >
                 <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+
+              <button
+                onClick={() => window.location.href = `/${locale}/recovery-plans`}
+                className="p-3 sm:p-4 bg-purple-100 hover:bg-purple-200 text-purple-700 transition-all active:scale-95"
+                style={{
+                  borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                  border: '3px solid #c4b5fd',
+                  boxShadow: '3px 3px 0px rgba(0,0,0,0.1)'
+                }}
+                title="View recovery plans"
+              >
+                <span className="text-base sm:text-lg">📋</span>
               </button>
 
               <VoiceRecorder
@@ -1308,9 +1577,14 @@ export default function HealthcareChat() {
               <button
                 onClick={() => handleEmergencyLocator('manual')}
                 disabled={isLocating || isLoading}
-                className={`p-3 sm:p-4 rounded-full transition-all shadow-md active:scale-95 disabled:opacity-50
+                className={`p-3 sm:p-4 transition-all active:scale-95 disabled:opacity-50
                   ${isLocating ? 'bg-red-100 text-red-400' : 'bg-red-50 hover:bg-red-100 text-red-600'}
                 `}
+                style={{
+                  borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                  border: '3px solid rgba(220, 38, 38, 0.3)',
+                  boxShadow: '3px 3px 0px rgba(220, 38, 38, 0.2)'
+                }}
                 title="Find Nearby Hospitals (Emergency)"
               >
                 {isLocating ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Activity className="w-4 h-4 sm:w-5 sm:h-5" />}
@@ -1319,7 +1593,22 @@ export default function HealthcareChat() {
               <button
                 onClick={() => handleSubmit()}
                 disabled={isLoading || !input.trim() || isProcessingAudio}
-                className="p-3 sm:p-4 bg-[#3A5A40] hover:bg-[#2F4A33] text-white rounded-full transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:shadow-none active:scale-95"
+                className="p-3 sm:p-4 bg-[#3A5A40] hover:bg-[#2F4A33] text-white transition-all disabled:opacity-50 active:scale-95"
+                style={{
+                  borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                  border: '3px solid #2F4A33',
+                  boxShadow: '5px 5px 0px rgba(0, 0, 0, 0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isLoading && input.trim() && !isProcessingAudio) {
+                    e.currentTarget.style.transform = 'translate(-2px, -2px)';
+                    e.currentTarget.style.boxShadow = '7px 7px 0px rgba(0, 0, 0, 0.2)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translate(0, 0)';
+                  e.currentTarget.style.boxShadow = '5px 5px 0px rgba(0, 0, 0, 0.2)';
+                }}
               >
                 {isLoading ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <Send className="w-4 h-4 sm:w-5 sm:h-5" />}
               </button>
@@ -1365,7 +1654,26 @@ export default function HealthcareChat() {
               </button>
             </div>
             <div className="p-6">
-              <DocumentUploader />
+              <DocumentUploader 
+                onExtractComplete={(data) => {
+                  // Add extracted data as a message in chat
+                  const formattedMessage = formatExtractedData(data);
+                  setMessages((prev) => [
+                    ...prev,
+                    { 
+                      role: 'user', 
+                      content: '📄 Uploaded medical document', 
+                      rawContent: '📄 Uploaded medical document' 
+                    },
+                    { 
+                      role: 'assistant', 
+                      content: formattedMessage, 
+                      rawContent: JSON.stringify(data) 
+                    }
+                  ]);
+                  setShowDocumentUpload(false);
+                }}
+              />
             </div>
           </div>
         </div>

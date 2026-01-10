@@ -34,7 +34,32 @@ def initialize_firebase():
             else:
                 print("❌ FIREBASE_SERVICE_ACCOUNT_PATH not set in .env")
         
-        # Option 2: Use default credentials (if deployed on GCP)
+        # Option 2: Use environment variables to construct credentials
+        project_id = os.getenv("FIREBASE_PROJECT_ID")
+        private_key = os.getenv("FIREBASE_PRIVATE_KEY")
+        client_email = os.getenv("FIREBASE_CLIENT_EMAIL")
+        
+        if project_id and private_key and client_email:
+            print("🔍 Attempting to initialize with environment variables...")
+            # Replace literal \n with actual newlines in private key
+            private_key = private_key.replace('\\n', '\n')
+            
+            cred_dict = {
+                "type": "service_account",
+                "project_id": project_id,
+                "private_key": private_key,
+                "client_email": client_email,
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            _firebase_initialized = True
+            print("✓ Firebase Admin SDK initialized with environment variables")
+            return
+        else:
+            print("❌ Firebase environment variables not set (FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL)")
+        
+        # Option 3: Use default credentials (if deployed on GCP)
         try:
             firebase_admin.initialize_app()
             _firebase_initialized = True
@@ -44,7 +69,9 @@ def initialize_firebase():
             print(f"❌ Default credentials also failed: {e2}")
         
         print("⚠️ Firebase Admin SDK not initialized - no credentials found")
-        print("   Set FIREBASE_SERVICE_ACCOUNT_PATH in .env or deploy to GCP")
+        print("   Option 1: Set FIREBASE_SERVICE_ACCOUNT_PATH in .env")
+        print("   Option 2: Set FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL in .env")
+        print("   Option 3: Deploy to GCP with default credentials")
     
     except Exception as e:
         print(f"⚠️ Firebase initialization error: {e}")

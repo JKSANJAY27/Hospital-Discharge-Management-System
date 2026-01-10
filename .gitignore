@@ -215,11 +215,21 @@ marimo/_lsp/
 
 # Project specific ignores
 venv101/
+venv1001/
 old_files/
 uploads/
 healthcare.db
 audit_ledger.json
 test_*.py
+check_*.py
+demo_*.py
+*_test.py
+package-lock.json
+patient_schedule.ics
+*.png
+*.jpg
+*.jpeg
+*.gif
 
 # Firebase credentials (NEVER COMMIT THESE)
 config/firebase-service-account.json
@@ -246,10 +256,25 @@ frontend/.env
 
 # Audio cache
 audio_cache/
+*.wav
+*.mp3
 
 # Data directories
 data/
 logs/
+notebooks/
+trained_prompts/
 
+# Next.js build output
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/node_modules/
+
+# MongoDB
+*.bson
+
+# ChromaDB
+chroma_db/
 
 DONT_LOOK/

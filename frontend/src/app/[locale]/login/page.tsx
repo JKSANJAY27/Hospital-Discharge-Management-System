@@ -9,6 +9,8 @@ import { GoogleAuthProvider } from "firebase/auth";
 const googleProvider = new GoogleAuthProvider();
 import { useTranslations } from 'next-intl';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import SketchBackground from '@/components/sketch/SketchBackground';
+import '@/styles/sketch.css';
 
 export default function LoginPage() {
     const t = useTranslations('Login');
@@ -104,43 +106,113 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-[#FDFCF8] p-4 font-sans relative overflow-hidden">
+            
+            {/* Sketch background with doodles */}
+            <SketchBackground />
 
-            {/* Background Decorative Elements */}
-            <div className="absolute top-0 left-0 w-64 h-64 bg-[#3A5A40]/5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
-            <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#A3B18A]/10 rounded-full blur-3xl translate-x-1/3 translate-y-1/3"></div>
+            {/* Large blob backgrounds with sketch effect */}
+            <div className="absolute top-0 left-0 w-64 h-64 bg-[#3A5A40]/5 blur-3xl -translate-x-1/2 -translate-y-1/2 float-sketch"></div>
+            <div className="absolute bottom-0 right-0 w-96 h-96 bg-[#A3B18A]/10 blur-3xl translate-x-1/3 translate-y-1/3 wiggle-sketch"></div>
 
             <div className="absolute top-4 right-4 z-20">
                 <LanguageSwitcher />
             </div>
 
-            <div className="w-full max-w-md z-10">
-                {/* Header Logo Area */}
+            <div className="w-full max-w-md z-10" style={{ animation: 'bounce-in 0.8s ease-out' }}>
+                {/* Header Logo Area with comic style */}
                 <div className="flex flex-col items-center mb-8">
-                    <div className="w-16 h-16 bg-[#3A5A40] rounded-2xl flex items-center justify-center shadow-lg shadow-[#3A5A40]/20 mb-6 rotate-3 transition-transform hover:rotate-0">
-                        <Leaf className="w-8 h-8 text-[#F2E8CF]" strokeWidth={2} />
+                    <div 
+                        className="w-20 h-20 bg-[#3A5A40] flex items-center justify-center shadow-lg mb-6 relative wiggle-sketch"
+                        style={{
+                            borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                            border: '4px solid #2F4A33',
+                            boxShadow: '5px 5px 0px rgba(0,0,0,0.2), -2px -2px 0px rgba(255,255,255,0.5)'
+                        }}
+                    >
+                        <Leaf className="w-10 h-10 text-[#F2E8CF]" strokeWidth={3} />
+                        {/* Hand-drawn circle accent */}
+                        <div 
+                            className="absolute -top-2 -right-2 w-6 h-6 bg-[#A3B18A] rounded-full"
+                            style={{
+                                border: '2px solid #588157',
+                                animation: 'pulse-sketch 2s ease-in-out infinite'
+                            }}
+                        />
                     </div>
-                    <h1 className="text-3xl font-serif font-bold text-stone-800 text-center">{t('welcome')}</h1>
-                    <p className="text-stone-500 mt-2 text-center">{t('subtitle')}</p>
+                    <h1 
+                        className="text-4xl font-bold text-stone-800 text-center relative"
+                        style={{
+                            fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+                            letterSpacing: '0.5px',
+                            textShadow: '4px 4px 0px rgba(163, 177, 138, 0.4), 2px 2px 0px rgba(58, 90, 64, 0.2)',
+                            transform: 'rotate(-1deg)'
+                        }}
+                    >
+                        {t('welcome')}
+                        {/* Comic underline */}
+                        <svg className="absolute -bottom-2 left-0 w-full h-2" style={{ overflow: 'visible' }}>
+                            <path
+                                d="M 0 2 Q 50 0, 100 2 T 200 2"
+                                fill="none"
+                                stroke="#3A5A40"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                opacity="0.4"
+                                style={{
+                                    strokeDasharray: '5,3'
+                                }}
+                            />
+                        </svg>
+                    </h1>
+                    <p className="text-stone-600 mt-4 text-center font-medium">{t('subtitle')}</p>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-white rounded-3xl shadow-xl shadow-stone-200/50 p-8 border border-stone-100">
+                {/* Login Card with sketch border */}
+                <div 
+                    className="bg-white p-8 relative"
+                    style={{
+                        borderRadius: '255px 25px 225px 25px/25px 225px 25px 255px',
+                        border: '4px solid #3A5A40',
+                        boxShadow: '8px 8px 0px rgba(58, 90, 64, 0.2), -2px -2px 0px rgba(163, 177, 138, 0.3)',
+                        background: 'linear-gradient(135deg, #ffffff 0%, #fdfcf8 100%)'
+                    }}
+                >
                     <form onSubmit={handleLogin} className="space-y-6">
                         {error && (
-                            <div className="bg-red-50 border border-red-100 text-red-600 p-3 rounded-xl text-sm text-center font-medium">
+                            <div 
+                                className="bg-red-50 border-4 text-red-700 p-4 text-sm text-center font-bold relative"
+                                style={{
+                                    borderRadius: '25px 255px 15px 225px/255px 15px 225px 25px',
+                                    borderColor: '#dc2626',
+                                    boxShadow: '3px 3px 0px rgba(220, 38, 38, 0.3)'
+                                }}
+                            >
                                 {error}
                             </div>
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-stone-700 ml-1">{t('email')}</label>
+                            <label className="text-sm font-black text-stone-800 ml-1 uppercase tracking-wide">{t('email')}</label>
                             <div className="relative group">
-                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 group-focus-within:text-[#3A5A40] transition-colors" />
+                                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 group-focus-within:text-[#3A5A40] transition-colors z-10" />
                                 <input
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3.5 pl-12 pr-4 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] transition-all"
+                                    className="w-full bg-white py-4 pl-12 pr-4 text-stone-800 placeholder-stone-400 focus:outline-none font-medium relative"
+                                    style={{
+                                        border: '3px solid #d6d3d1',
+                                        borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                                        boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.05)'
+                                    }}
+                                    onFocus={(e) => {
+                                        e.target.style.borderColor = '#3A5A40';
+                                        e.target.style.boxShadow = '0 0 0 3px rgba(58, 90, 64, 0.1), inset 2px 2px 4px rgba(0,0,0,0.05)';
+                                    }}
+                                    onBlur={(e) => {
+                                        e.target.style.borderColor = '#d6d3d1';
+                                        e.target.style.boxShadow = 'inset 2px 2px 4px rgba(0,0,0,0.05)';
+                                    }}
                                     placeholder="you@example.com"
                                     required
                                 />
@@ -148,14 +220,27 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-stone-700 ml-1">{t('password')}</label>
+                            <label className="text-sm font-black text-stone-800 ml-1 uppercase tracking-wide">{t('password')}</label>
                             <div className="relative group">
-                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 group-focus-within:text-[#3A5A40] transition-colors" />
+                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400 group-focus-within:text-[#3A5A40] transition-colors z-10" />
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full bg-stone-50 border border-stone-200 rounded-xl py-3.5 pl-12 pr-4 text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-[#3A5A40]/20 focus:border-[#3A5A40] transition-all"
+                                    className="w-full bg-white py-4 pl-12 pr-4 text-stone-800 placeholder-stone-400 focus:outline-none font-medium relative"
+                                    style={{
+                                        border: '3px solid #d6d3d1',
+                                        borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                                        boxShadow: 'inset 2px 2px 4px rgba(0,0,0,0.05)'
+                                    }}
+                                    onFocus={(e) => {
+                                        e.target.style.borderColor = '#3A5A40';
+                                        e.target.style.boxShadow = '0 0 0 3px rgba(58, 90, 64, 0.1), inset 2px 2px 4px rgba(0,0,0,0.05)';
+                                    }}
+                                    onBlur={(e) => {
+                                        e.target.style.borderColor = '#d6d3d1';
+                                        e.target.style.boxShadow = 'inset 2px 2px 4px rgba(0,0,0,0.05)';
+                                    }}
                                     placeholder="••••••••"
                                     required
                                 />
@@ -165,7 +250,21 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full bg-[#3A5A40] hover:bg-[#2F4A33] text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
+                            className="w-full bg-[#3A5A40] hover:bg-[#2F4A33] text-white font-black py-4 uppercase tracking-wider transition-all flex items-center justify-center gap-2 group relative overflow-hidden"
+                            style={{
+                                borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                                border: '3px solid #2F4A33',
+                                boxShadow: '5px 5px 0px rgba(0, 0, 0, 0.2)',
+                                fontSize: '1.1rem'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translate(-2px, -2px)';
+                                e.currentTarget.style.boxShadow = '7px 7px 0px rgba(0, 0, 0, 0.2)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translate(0, 0)';
+                                e.currentTarget.style.boxShadow = '5px 5px 0px rgba(0, 0, 0, 0.2)';
+                            }}
                         >
                             {isLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -177,22 +276,58 @@ export default function LoginPage() {
                             )}
                         </button>
 
-                        {/* Divider */}
-                        <div className="relative">
+                        {/* Divider with comic style */}
+                        <div className="relative my-8">
                             <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-stone-200"></div>
+                                <svg className="w-full h-1" style={{ overflow: 'visible' }}>
+                                    <path
+                                        d="M 0 0 Q 50 -2, 100 0 T 200 0 T 300 0 T 400 0"
+                                        fill="none"
+                                        stroke="#d6d3d1"
+                                        strokeWidth="3"
+                                        strokeLinecap="round"
+                                        style={{
+                                            strokeDasharray: '8,5'
+                                        }}
+                                    />
+                                </svg>
                             </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-4 bg-white text-stone-500 font-medium">{t('orContinue')}</span>
+                            <div className="relative flex justify-center">
+                                <span 
+                                    className="px-4 bg-white text-stone-700 font-black uppercase tracking-wide text-xs"
+                                    style={{
+                                        border: '2px solid #d6d3d1',
+                                        borderRadius: '15px 5px 15px 5px/5px 15px 5px 15px',
+                                        padding: '6px 16px'
+                                    }}
+                                >
+                                    {t('orContinue')}
+                                </span>
                             </div>
                         </div>
 
-                        {/* Google Sign In Button */}
+                        {/* Google Sign In Button with sketch style */}
                         <button
                             type="button"
                             onClick={handleGoogleSignIn}
                             disabled={isGoogleLoading}
-                            className="w-full bg-white hover:bg-stone-50 border-2 border-stone-200 hover:border-[#3A5A40] text-stone-700 font-bold py-4 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 group"
+                            className="w-full bg-white hover:bg-stone-50 text-stone-800 font-black py-4 uppercase tracking-wide transition-all flex items-center justify-center gap-3 group relative"
+                            style={{
+                                borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+                                border: '3px solid #d6d3d1',
+                                boxShadow: '5px 5px 0px rgba(0, 0, 0, 0.1)',
+                                fontSize: '1rem'
+                            }}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translate(-2px, -2px)';
+                                e.currentTarget.style.boxShadow = '7px 7px 0px rgba(0, 0, 0, 0.1)';
+                                e.currentTarget.style.borderColor = '#3A5A40';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translate(0, 0)';
+                                e.currentTarget.style.boxShadow = '5px 5px 0px rgba(0, 0, 0, 0.1)';
+                                e.currentTarget.style.borderColor = '#d6d3d1';
+                            }}
                         >
                             {isGoogleLoading ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -211,12 +346,45 @@ export default function LoginPage() {
                     </form>
                 </div>
 
-                {/* Footer */}
+                {/* Footer with comic style */}
                 <div className="mt-8 text-center">
-                    <p className="text-stone-500">
+                    <p className="text-stone-600 font-medium">
                         {t('noAccount')}{" "}
-                        <Link href="/signup" className="text-[#3A5A40] font-bold hover:underline hover:text-[#2F4A33] transition-colors">
+                        <Link 
+                            href="/signup" 
+                            className="text-[#3A5A40] font-black hover:text-[#2F4A33] transition-colors relative inline-block"
+                            style={{
+                                textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                                const underline = e.currentTarget.querySelector('.underline-sketch');
+                                if (underline) {
+                                    (underline as HTMLElement).style.strokeDashoffset = '0';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                const underline = e.currentTarget.querySelector('.underline-sketch');
+                                if (underline) {
+                                    (underline as HTMLElement).style.strokeDashoffset = '100';
+                                }
+                            }}
+                        >
                             {t('startJourney')}
+                            <svg className="absolute -bottom-1 left-0 w-full h-2" style={{ overflow: 'visible' }}>
+                                <path
+                                    className="underline-sketch"
+                                    d="M 0 1 Q 25 -1, 50 1 T 100 1"
+                                    fill="none"
+                                    stroke="#3A5A40"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                    style={{
+                                        strokeDasharray: '100',
+                                        strokeDashoffset: '100',
+                                        transition: 'stroke-dashoffset 0.5s ease'
+                                    }}
+                                />
+                            </svg>
                         </Link>
                     </p>
                 </div>

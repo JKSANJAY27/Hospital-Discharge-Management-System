@@ -48,7 +48,7 @@ class UserMongo(BaseModel):
 
 
 class SessionMongo(BaseModel):
-    """Chat session with blockchain link"""
+    """Chat session with blockchain link and conversation metadata"""
     id: Optional[PyObjectId] = Field(default_factory=ObjectId, alias="_id")
     user_id: PyObjectId
     title_encrypted: str
@@ -57,22 +57,37 @@ class SessionMongo(BaseModel):
     status: str = "active"  # "active", "archived"
     blockchain_session_hash: Optional[str] = None
     
+    # Conversation metadata
+    message_count: int = 0  # Track total messages in session
+    primary_language: Optional[str] = None  # Detected primary language
+    topics: List[str] = Field(default_factory=list)  # Track conversation topics
+    last_intent: Optional[str] = None  # Track last detected intent
+    context_summary: Optional[str] = None  # AI-generated summary for long conversations
+    
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
 
 
 class MessageMongo(BaseModel):
-    """Encrypted message with blockchain proof"""
+    """Encrypted message with blockchain proof and enhanced context"""
     id: Optional[PyObjectId] = Field(default_factory=ObjectId, alias="_id")
     session_id: PyObjectId
     user_id: PyObjectId
-    role: str  # "user", "assistant"
+    role: str  # "user", "assistant", "system"
     content_encrypted: str  # AES-256 encrypted
     intent: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     ip_address_hashed: str  # SHA-256 for audit
     blockchain_tx_hash: Optional[str] = None
+    
+    # Enhanced context fields
+    metadata: dict = Field(default_factory=dict)  # Store additional context like language, location, etc.
+    token_count: Optional[int] = None  # Track token usage per message
+    model_used: Optional[str] = None  # Track which model generated this response
+    response_time_ms: Optional[int] = None  # Track response latency
+    citations: List[str] = Field(default_factory=list)  # Track source citations
+    audio_url: Optional[str] = None  # TTS audio if generated
     
     class Config:
         populate_by_name = True

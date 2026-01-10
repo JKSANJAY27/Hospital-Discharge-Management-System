@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import SketchBackground from '@/components/sketch/SketchBackground';
+import '@/styles/sketch.css';
 
 interface BlockchainStats {
   blockchain_type: string;
@@ -102,20 +104,39 @@ export default function BlockchainAuditPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFCF8] p-8">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-[#FDFCF8] p-8 relative">
+      <SketchBackground />
+      <div className="max-w-6xl mx-auto relative z-10">
         {/* Header */}
         <div className="mb-8">
           <button
             onClick={() => router.back()}
-            className="mb-4 text-primary hover:text-primary-dark hover:underline flex items-center gap-2 font-medium transition-colors"
+            className="mb-4 text-[#3A5A40] hover:text-[#2F4A33] flex items-center gap-2 font-black transition-colors px-3 py-2"
+            style={{
+              borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+              border: '2px solid transparent'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#3A5A40';
+              e.currentTarget.style.backgroundColor = '#f5f5f4';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'transparent';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
           >
             {t('backToChat')}
           </button>
-          <h1 className="text-4xl font-bold text-stone-800 flex items-center gap-3 font-serif">
+          <h1 
+            className="text-4xl font-bold text-stone-800 flex items-center gap-3"
+            style={{
+              fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+              textShadow: '4px 4px 0px rgba(163, 177, 138, 0.3)'
+            }}
+          >
             🔗 {t('title')}
           </h1>
-          <p className="text-stone-600 mt-2">
+          <p className="text-stone-600 mt-2 font-medium">
             {t('subtitle')}
           </p>
         </div>
@@ -124,19 +145,29 @@ export default function BlockchainAuditPage() {
         <div className="flex gap-4 mb-6">
           <button
             onClick={() => setActiveTab('stats')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'stats'
-                ? 'bg-primary text-white shadow-lg'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-              }`}
+            className={`px-6 py-3 font-black transition-all uppercase tracking-wide ${activeTab === 'stats'
+                ? 'bg-[#3A5A40] text-white'
+                : 'bg-white text-stone-700 hover:bg-stone-50'
+            }`}
+            style={{
+              borderRadius: '225px 15px 225px 15px/15px 255px 15px 225px',
+              border: '3px solid ' + (activeTab === 'stats' ? '#2F4A33' : '#d6d3d1'),
+              boxShadow: activeTab === 'stats' ? '5px 5px 0px rgba(0, 0, 0, 0.2)' : '3px 3px 0px rgba(0, 0, 0, 0.1)'
+            }}
           >
             📊 {t('tabStats')}
           </button>
           <button
             onClick={() => setActiveTab('audit')}
-            className={`px-6 py-3 rounded-xl font-semibold transition-all ${activeTab === 'audit'
-                ? 'bg-primary text-white shadow-lg'
-                : 'bg-white text-stone-700 hover:bg-stone-50 border border-stone-200'
-              }`}
+            className={`px-6 py-3 font-black transition-all uppercase tracking-wide ${activeTab === 'audit'
+                ? 'bg-[#3A5A40] text-white'
+                : 'bg-white text-stone-700 hover:bg-stone-50'
+            }`}
+            style={{
+              borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+              border: '3px solid ' + (activeTab === 'audit' ? '#2F4A33' : '#d6d3d1'),
+              boxShadow: activeTab === 'audit' ? '5px 5px 0px rgba(0, 0, 0, 0.2)' : '3px 3px 0px rgba(0, 0, 0, 0.1)'
+            }}
           >
             📋 {t('tabAudit')}
           </button>

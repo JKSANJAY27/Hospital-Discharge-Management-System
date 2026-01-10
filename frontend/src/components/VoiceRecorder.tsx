@@ -100,16 +100,40 @@ export default function VoiceRecorder({ onTranscribed, onError, onProcessingChan
   return (
     <button
       onClick={() => (recording ? stopRecording() : startRecording())}
-      className={`p-3.5 rounded-full shadow-lg transition-all duration-300 flex items-center justify-center group ${recording
-        ? "bg-accent text-white ring-4 ring-accent/20 animate-pulse"
-        : "bg-white text-primary-light border border-primary-light/20 hover:bg-primary hover:text-white hover:shadow-organic hover:-translate-y-0.5"
+      className={`p-3.5 transition-all duration-300 flex items-center justify-center group ${recording
+        ? "bg-red-500 text-white animate-pulse"
+        : "bg-white text-[#3A5A40] hover:bg-[#3A5A40] hover:text-white"
         }`}
+      style={{
+        borderRadius: recording 
+          ? '50%' 
+          : '255px 15px 225px 15px/15px 225px 15px 255px',
+        border: recording 
+          ? '3px solid #ef4444' 
+          : '3px solid #3A5A40',
+        boxShadow: recording 
+          ? '0 0 0 4px rgba(239, 68, 68, 0.2)' 
+          : '5px 5px 0px rgba(0, 0, 0, 0.2)',
+        transform: recording ? 'scale(1)' : 'scale(1)',
+      }}
+      onMouseEnter={(e) => {
+        if (!recording) {
+          e.currentTarget.style.transform = 'translate(-2px, -2px)';
+          e.currentTarget.style.boxShadow = '7px 7px 0px rgba(0, 0, 0, 0.2)';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!recording) {
+          e.currentTarget.style.transform = 'translate(0, 0)';
+          e.currentTarget.style.boxShadow = '5px 5px 0px rgba(0, 0, 0, 0.2)';
+        }
+      }}
       title={recording ? t('stopRecording') : t('speakQuery')}
     >
       {recording ? (
         <Square className="w-5 h-5 fill-current" />
       ) : (
-        <Mic className="w-5 h-5" />
+        <Mic className="w-6 h-6" />
       )}
     </button>
   );

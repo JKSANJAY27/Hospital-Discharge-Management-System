@@ -19,9 +19,12 @@ class HealthcareConfig:
     """
     Configuration class that initializes and holds all necessary services.
     This is used by both the CLI and the API to ensure consistency.
+    
+    Args:
+        skip_rag: If True, skip RAG initialization for faster startup (chat-only mode)
     """
     
-    def __init__(self):
+    def __init__(self, skip_rag: bool = False):
         # 1. Load API Keys and Basic Settings
         openai_api_key_1 = os.getenv("OPENAI_API_KEY_1") or os.getenv("OPENAI_API_KEY")
         openai_api_key_2 = os.getenv("OPENAI_API_KEY_2")
@@ -79,7 +82,14 @@ class HealthcareConfig:
         )
         print("   ✓ Web Search ready.")
         
-        # 3. Initialize Domain-Specific RAG Systems
+        # 3. Initialize Domain-Specific RAG Systems (SKIP IF NOT NEEDED)
+        if skip_rag:
+            print("   ⚡ Skipping RAG initialization (chat-only mode) - faster startup!")
+            self.rag_retrievers: Dict[str, Retriever] = {}
+            self.vector_stores: Dict[str, VectorStore] = {}
+            self.rag_retriever = None
+            return
+        
         print("   -> Initializing Domain-Specific RAG Systems...")
         print(f"   -> Using vector store: {settings.VECTOR_STORE_TYPE.upper()}")
         

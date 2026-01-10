@@ -16,6 +16,11 @@ langchain-experimental<0.3.0
 tavily-python==0.7.12
 tiktoken==0.7.0
 
+# Google Gemini Vision API
+google-generativeai>=0.8.0
+google-api-core>=2.11.0
+Pillow>=10.0.0
+
 # Embeddings & RAG
 sentence-transformers>=3.3.1
 huggingface-hub>=0.23.0
@@ -27,11 +32,14 @@ chromadb==1.2.1
 # Database
 pymongo==4.6.1
 motor>=3.4.0
+psycopg2-binary==2.9.9
 
 # Authentication & Security
 firebase-admin==7.1.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
+cryptography==41.0.7
+python-jose[cryptography]==3.3.0
 
 # HTTP & Utilities
 requests==2.32.3
@@ -43,25 +51,19 @@ tqdm>=4.65.0
 
 # Document Processing
 pypdf==4.3.1
+PyPDF2>=3.0.0
 unstructured==0.15.9
 unstructured-client==0.25.5
 networkx==3.3
+
+# Google Drive Integration
 google-api-python-client>=2.0.0
 google-auth-oauthlib>=1.0.0
 google-auth>=2.0.0
-python-jose[cryptography]==3.3.0
 
-# Encryption & Security
-cryptography==41.0.7
-
-# Blockchain
-psycopg2-binary==2.9.9
+# Audio & Media Processing
 sarvamai
 pydub
-
-sarvamai
-
-# Agent Lightning (Training & Optimization)
 
 # Fixed Dependencies
 numpy<2

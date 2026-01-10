@@ -66,9 +66,27 @@ class DischargeWorkflow:
         response_language: str = "en"
     ) -> Dict[str, Any]:
         """
-        Main chat entry point.
+        Main chat entry point with full conversation context.
+        
+        Args:
+            user_input: Current user message
+            query_for_classification: Enhanced query with profile context
+            user_profile: User health profile data
+            conversation_history: List of previous messages with role, content, timestamp
+            user_location: (latitude, longitude) tuple for location-based responses
+            response_language: Target language for response
         """
         print(f"\n💬 Chat Request: {user_input}")
+        print(f"📚 Conversation History: {len(conversation_history) if conversation_history else 0} messages")
+        if user_profile:
+            print(f"👤 User Profile: Age={user_profile.get('age')}, Gender={user_profile.get('gender')}")
+            if user_profile.get("document_context"):
+                print(f"📄 Document Context Length: {len(user_profile.get('document_context'))} chars")
+                print(f"📄 Document Context Preview: {user_profile.get('document_context')[:200]}...")
+            else:
+                print("⚠️ No document_context in user_profile!")
+        else:
+            print("⚠️ No user_profile provided!")
         
         intent = "general_chat"
         video_resources = None
@@ -84,10 +102,65 @@ class DischargeWorkflow:
             except Exception as e:
                 print(f"   ⚠️ Education chain failed: {e}")
         
+        # Build messages with conversation history for context
+        
+        # Extract user profile context (includes prescriptions, lab reports, etc.)
+        profile_info = ""
+        if user_profile:
+            profile_info = f"\n\n=== User Medical Context ===\n"
+            if user_profile.get("age"):
+                profile_info += f"Age: {user_profile.get('age')}\n"
+            if user_profile.get("gender"):
+                profile_info += f"Gender: {user_profile.get('gender')}\n"
+            
+            # Add all uploaded medical documents (prescriptions, lab reports, discharge summaries)
+            if user_profile.get("document_context"):
+                profile_info += user_profile.get("document_context")
+        
         messages = [
-            ("system", "You are a helpful healthcare assistant named Swastha. You help users with discharge instructions, recovery advice, and general health queries."),
-            ("user", user_input)
+            ("system", f"""You are Swastha, a helpful healthcare assistant. You help users with discharge instructions, recovery advice, and general health queries.
+
+Response Language: {response_language}
+IMPORTANT: Respond in {response_language}. If the user writes in a specific language, respond in that language.
+
+CRITICAL RULES:
+1. NEVER prescribe medications - You are NOT a licensed doctor
+2. NEVER recommend specific dosages or treatment plans
+3. ALWAYS advise users to consult their doctor for prescriptions
+4. You can ONLY explain existing prescriptions from their uploaded documents
+5. You can provide general health information and recovery advice
+6. If asked about medication, remind them to consult their prescribing doctor
+
+You can:
+- Explain uploaded prescriptions and lab reports
+- Provide general health education
+- Answer questions about existing treatments
+- Suggest when to seek medical attention
+
+You cannot:
+- Prescribe new medications
+- Change medication dosages
+- Diagnose conditions
+- Replace professional medical advice
+
+{profile_info}""")
         ]
+        
+        # Add conversation history to provide context
+        if conversation_history:
+            print(f"   → Adding {len(conversation_history)} messages to context")
+            for hist_msg in conversation_history:
+                role = hist_msg.get("role", "user")
+                content = hist_msg.get("content", "")
+                
+                # Map roles to proper message format
+                if role == "user":
+                    messages.append(("user", content))
+                elif role == "assistant":
+                    messages.append(("assistant", content))
+        
+        # Add current user input
+        messages.append(("user", user_input))
         
         response = await self.config.llm_primary.ainvoke(messages)
         output_text = response.content

@@ -8,6 +8,10 @@ import {
 } from "lucide-react";
 import { useTranslations } from 'next-intl';
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import SketchBackground from '@/components/sketch/SketchBackground';
+import '@/styles/sketch.css';
+import SketchBackground from '@/components/sketch/SketchBackground';
+import '@/styles/sketch.css';
 
 type UserProfile = {
   name: string;
@@ -144,18 +148,38 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FDFCF8] font-sans">
+    <div className="min-h-screen bg-[#FDFCF8] font-sans relative">
+      <SketchBackground />
+      
       {/* Navbar / Header */}
-      <header className="bg-white border-b border-stone-200 px-4 py-4 sticky top-0 z-10">
+      <header className="bg-white border-b-4 border-stone-800 px-4 py-4 sticky top-0 z-10 relative">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
               href="/"
-              className="p-2 text-stone-500 hover:text-[#3A5A40] hover:bg-stone-50 rounded-full transition-colors"
+              className="p-2 text-stone-500 hover:text-[#3A5A40] transition-colors"
+              style={{
+                borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#3A5A40';
+                e.currentTarget.style.backgroundColor = '#f5f5f4';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
             >
               <ArrowLeft className="w-6 h-6" />
             </Link>
-            <h1 className="text-xl font-serif font-bold text-stone-800">{t('title')}</h1>
+            <h1 
+              className="text-2xl font-bold text-stone-800"
+              style={{
+                fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+                textShadow: '3px 3px 0px rgba(163, 177, 138, 0.3)'
+              }}
+            >{t('title')}</h1>
           </div>
           <LanguageSwitcher />
         </div>
@@ -164,35 +188,85 @@ export default function ProfilePage() {
       <main className="max-w-3xl mx-auto p-4 md:p-8">
 
         {/* Profile Header Card */}
-        <div className="bg-gradient-to-br from-[#3A5A40] to-[#2F4A33] rounded-3xl p-8 text-white shadow-lg mb-8 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl translate-x-1/3 -translate-y-1/2"></div>
+        <div 
+          className="bg-gradient-to-br from-[#3A5A40] to-[#2F4A33] p-8 text-white mb-8 relative overflow-hidden wiggle-sketch"
+          style={{
+            borderRadius: '255px 25px 225px 25px/25px 225px 25px 255px',
+            border: '4px solid #2F4A33',
+            boxShadow: '8px 8px 0px rgba(0, 0, 0, 0.3), -2px -2px 0px rgba(255, 255, 255, 0.1)'
+          }}
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 blur-3xl translate-x-1/3 -translate-y-1/2"></div>
 
           <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
             <div className="relative group">
-              <div className="w-24 h-24 bg-[#E0E5D9] rounded-full flex items-center justify-center border-4 border-white/20 shadow-xl text-[#3A5A40]">
-                <span className="font-serif text-3xl font-bold">
+              <div 
+                className="w-24 h-24 bg-[#E0E5D9] flex items-center justify-center border-4 border-white/20 text-[#3A5A40] float-sketch"
+                style={{
+                  borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                  boxShadow: '5px 5px 0px rgba(0, 0, 0, 0.2)'
+                }}
+              >
+                <span className="font-black text-3xl">
                   {profile.name ? profile.name.charAt(0).toUpperCase() : <Leaf />}
                 </span>
               </div>
-              <button className="absolute bottom-0 right-0 bg-white text-[#3A5A40] p-2 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                className="absolute bottom-0 right-0 bg-white text-[#3A5A40] p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{
+                  borderRadius: '255px 15px 225px 15px/15px 225px 15px 255px',
+                  border: '2px solid #3A5A40',
+                  boxShadow: '3px 3px 0px rgba(0, 0, 0, 0.2)'
+                }}
+              >
                 <Camera className="w-4 h-4" />
               </button>
             </div>
 
             <div className="text-center md:text-left">
-              <h2 className="text-2xl font-serif font-bold">{profile.name || "User"}</h2>
-              <p className="text-emerald-100/80">{t('memberLabel')}</p>
+              <h2 
+                className="text-3xl font-bold"
+                style={{
+                  fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive',
+                  textShadow: '3px 3px 0px rgba(0, 0, 0, 0.3)'
+                }}
+              >{profile.name || "User"}</h2>
+              <p className="text-emerald-100/80 font-medium">{t('memberLabel')}</p>
             </div>
           </div>
         </div>
 
         {/* Details Form */}
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden">
-          <div className="p-6 border-b border-stone-100 flex items-center justify-between bg-stone-50/50">
-            <h3 className="font-serif font-bold text-stone-800">{t('personalInfo')}</h3>
+        <div 
+          className="bg-white overflow-hidden relative"
+          style={{
+            borderRadius: '255px 25px 225px 25px/25px 225px 25px 255px',
+            border: '4px solid #3A5A40',
+            boxShadow: '8px 8px 0px rgba(58, 90, 64, 0.2), -2px -2px 0px rgba(163, 177, 138, 0.3)'
+          }}
+        >
+          <div className="p-6 border-b-3 border-stone-800 flex items-center justify-between bg-stone-50/50">
+            <h3 
+              className="font-black text-stone-800 text-lg"
+              style={{
+                fontFamily: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive'
+              }}
+            >{t('personalInfo')}</h3>
             <button
               onClick={() => setIsEditing(!isEditing)}
-              className="text-sm font-medium text-[#3A5A40] hover:text-[#2F4A33] flex items-center gap-2"
+              className="text-sm font-black text-[#3A5A40] hover:text-[#2F4A33] flex items-center gap-2 px-3 py-2 transition-all"
+              style={{
+                borderRadius: '15px 225px 15px 225px/225px 15px 255px 15px',
+                border: '2px solid transparent'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#3A5A40';
+                e.currentTarget.style.backgroundColor = '#f5f5f4';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'transparent';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
             >
               {isEditing ? (
                 <>{t('cancel')}</>

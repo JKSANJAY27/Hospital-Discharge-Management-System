@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
+from pathlib import Path
 import logging
 import json
 import asyncio
@@ -76,6 +77,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SECRET_KEY is required")
     logger.info(f"✅ SECRET_KEY loaded: {secret_key[:10]}...")
     
+    # Initialize Firebase Admin SDK
+    try:
+        from src.auth.firebase_auth import initialize_firebase
+        initialize_firebase()
+    except Exception as e:
+        logger.warning(f"⚠️ Firebase initialization issue: {e}")
+    
     await mongodb_manager.connect()
     
     # Fetch initial health news
@@ -122,9 +130,17 @@ app.add_middleware(
 # OAuth2
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Initialize workflow
-config = HealthcareConfig()
+# Initialize workflow with skip_rag=True for faster startup (chat-only mode)
+# RAG systems are not used in the main chat flow - only LLM + conversation history
+print("⚡ Initializing in CHAT-ONLY mode (RAG systems disabled for faster startup)")
+config = HealthcareConfig(skip_rag=True)
 workflow = HealthcareWorkflow(config)
+print("✅ Workflow initialized (3-5 second startup vs 20+ seconds with RAG)")
+
+# Initialize image extractor once (reused across requests)
+from src.document_processor.image_extractor import ImageDocumentExtractor
+image_extractor = ImageDocumentExtractor(config)
+print("✅ Image extractor initialized (OpenAI Vision)")
 
 # Background task to refresh health news every hour
 async def refresh_health_news_periodically():
@@ -338,6 +354,175 @@ async def log_audit(user_id: ObjectId, action: str, resource_type: str, resource
         ))
 
 
+async def generate_recovery_action_plan(discharge_data: dict, config: HealthcareConfig) -> dict:
+    """
+    Generate a detailed day-by-day recovery action plan from discharge summary data.
+    
+    Returns a structured plan with:
+    - Daily tasks and medication schedules
+    - Weekly milestones
+    - Healthy habits
+    - Important restrictions
+    """
+    try:
+        # Extract relevant information
+        diagnosis = discharge_data.get("diagnosis", "")
+        medications = discharge_data.get("medications", [])
+        procedures = discharge_data.get("procedures", [])
+        follow_up = discharge_data.get("follow_up_instructions", "")
+        discharge_date = discharge_data.get("discharge_date", "")
+        
+        # Build comprehensive context for LLM
+        context = f"""
+PATIENT DISCHARGE INFORMATION:
+
+Diagnosis: {diagnosis}
+Procedures Performed: {', '.join(procedures) if procedures else 'Not specified'}
+Discharge Date: {discharge_date}
+
+MEDICATIONS PRESCRIBED:
+"""
+        if medications:
+            for idx, med in enumerate(medications, 1):
+                context += f"\n{idx}. {med.get('name', 'Unknown')}"
+                if med.get('dosage'):
+                    context += f" - {med.get('dosage')}"
+                if med.get('frequency'):
+                    context += f" - {med.get('frequency')}"
+                if med.get('timing'):
+                    timing = med.get('timing')
+                    if isinstance(timing, dict):
+                        times = []
+                        if timing.get('morning'): times.append('Morning')
+                        if timing.get('afternoon'): times.append('Afternoon')
+                        if timing.get('night'): times.append('Night')
+                        if times:
+                            context += f" ({', '.join(times)})"
+                        if timing.get('instruction'):
+                            context += f" - {timing.get('instruction')}"
+        else:
+            context += "\nNo medications prescribed"
+        
+        context += f"\n\nFOLLOW-UP INSTRUCTIONS:\n{follow_up}"
+        
+        # Create prompt for LLM
+        prompt = f"""
+You are a medical care coordinator creating a detailed Recovery Action Plan for a patient who just got discharged.
+
+Based on the following discharge information, create a comprehensive, easy-to-follow recovery plan:
+
+{context}
+
+Generate a detailed Recovery Action Plan in the following JSON structure:
+
+{{
+  "title": "Recovery Action Plan",
+  "subtitle": "Your day-by-day guide to recovery",
+  "daily_plans": [
+    {{
+      "day": "Day 1 (Today)",
+      "tasks": [
+        {{"task": "Rest in bed all day", "completed": false}},
+        {{"task": "Take [medication name] after breakfast", "completed": false}},
+        {{"task": "Take [medication name] after breakfast", "completed": false}},
+        {{"task": "Take [medication name] after dinner", "completed": false}},
+        {{"task": "Take [medication name] after dinner", "completed": false}}
+      ],
+      "medications_to_take": ["Medication 1", "Medication 2"]
+    }},
+    {{
+      "day": "Day 2",
+      "tasks": [
+        {{"task": "Rest in bed all day", "completed": false}},
+        {{"task": "Take medications after breakfast", "completed": false}},
+        {{"task": "Take medications after breakfast", "completed": false}},
+        {{"task": "Take medications after dinner", "completed": false}},
+        {{"task": "Take medications after dinner", "completed": false}}
+      ],
+      "medications_to_take": ["Medication 1", "Medication 2"]
+    }},
+    {{
+      "day": "Week 1",
+      "tasks": [
+        {{"task": "Continue taking medications as prescribed", "completed": false}},
+        {{"task": "Avoid lifting heavy weights with your left hand", "completed": false}},
+        {{"task": "Do not use soap on the affected area", "completed": false}}
+      ],
+      "medications_to_take": ["Medication 1", "Medication 2"]
+    }}
+  ],
+  "healthy_habits": [
+    "Rest and avoid strenuous activities for at least 2 days",
+    "Eat a balanced diet to support healing",
+    "Stay hydrated",
+    "Avoid smoking and alcohol"
+  ],
+  "important_restrictions": [
+    "No lifting heavy weights with your [affected area] for 2 weeks",
+    "[Any other specific restrictions based on procedure]"
+  ],
+  "emergency_signs": [
+    "Severe pain not relieved by medication",
+    "High fever (above 101°F/38.3°C)",
+    "Excessive bleeding or discharge",
+    "Signs of infection (redness, swelling, warmth)"
+  ]
+}}
+
+IMPORTANT GUIDELINES:
+1. Create realistic daily tasks based on the diagnosis and procedures
+2. Include specific medication schedules (morning, afternoon, evening) based on prescribed medications
+3. Day 1 should have more detailed medication timing
+4. Day 2 can be similar to Day 1
+5. Week 1 should focus on ongoing care and restrictions
+6. Include healthy habits appropriate for recovery
+7. List important restrictions based on the procedure/diagnosis
+8. Add emergency warning signs to watch for
+9. Be specific about which hand/body part if relevant to the procedure
+10. All tasks should be actionable and clear
+
+Return ONLY the JSON structure, no additional text.
+"""
+        
+        # Call LLM to generate plan
+        response = await config.llm_primary.ainvoke(prompt)
+        
+        # Parse JSON response
+        import json
+        import re
+        
+        # Extract JSON from response (in case there's markdown formatting)
+        json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
+        if json_match:
+            plan_json = json.loads(json_match.group())
+        else:
+            # Fallback to direct parsing
+            plan_json = json.loads(response.content)
+        
+        logger.info("✅ Recovery action plan generated successfully")
+        return plan_json
+        
+    except Exception as e:
+        logger.error(f"Failed to generate recovery plan: {e}", exc_info=True)
+        # Return a basic fallback plan
+        return {
+            "title": "Recovery Action Plan",
+            "subtitle": "Your guide to recovery",
+            "daily_plans": [
+                {
+                    "day": "Day 1 (Today)",
+                    "tasks": [
+                        {"task": "Rest and take prescribed medications", "completed": False}
+                    ],
+                    "medications_to_take": [med.get("name", "Unknown") for med in discharge_data.get("medications", [])]
+                }
+            ],
+            "healthy_habits": ["Rest well", "Stay hydrated", "Follow doctor's instructions"],
+            "important_restrictions": ["Avoid strenuous activities"],
+            "emergency_signs": ["Severe pain", "High fever", "Excessive bleeding"]
+        }
+
+
 # Authentication Endpoints
 @app.post("/auth/signup", response_model=Token)
 async def signup(user: UserCreate, request: Request):
@@ -440,7 +625,14 @@ async def firebase_login(request_data: FirebaseLoginRequest, request: Request):
         # Verify Firebase token with 10 seconds clock skew tolerance (run in thread)
         decoded_token = await asyncio.to_thread(verify_firebase_token, request_data.id_token, clock_skew_seconds=10)
         if not decoded_token:
-            raise HTTPException(status_code=401, detail="Invalid Firebase token")
+            logger.error("❌ Firebase token verification failed")
+            logger.error(f"   Token starts with: {request_data.id_token[:50]}...")
+            logger.error("   Check if Firebase Admin SDK is properly initialized")
+            logger.error("   Verify firebase-service-account.json exists in config/")
+            raise HTTPException(
+                status_code=401, 
+                detail="Invalid Firebase token. Firebase Admin SDK may not be properly configured. Check server logs."
+            )
         
         firebase_uid = decoded_token.get("uid")
         email = decoded_token.get("email") or request_data.email
@@ -1119,6 +1311,138 @@ async def chat(
         # Fetch recent documents for context
         document_context = ""
         full_documents_text = ""  # For detailed document queries
+        
+        # Fetch recent prescription extractions
+        prescription_context = ""
+        try:
+            recent_prescriptions = await mongodb_manager.db.prescriptions.find(
+                {"user_id": user_id}
+            ).sort("uploaded_at", -1).limit(3).to_list(length=3)
+            
+            if recent_prescriptions:
+                logger.info(f"💊 Found {len(recent_prescriptions)} recent prescriptions")
+                prescription_summaries = []
+                
+                for rx in recent_prescriptions:
+                    # Data is now at top level, not nested in extracted_data
+                    summary = f"\n📋 Prescription from {rx.get('date', 'Unknown date')}"
+                    
+                    doctor_info = rx.get("doctor_info", {})
+                    if isinstance(doctor_info, dict) and doctor_info.get("name"):
+                        summary += f" (Dr. {doctor_info.get('name')})"
+                    
+                    patient_info = rx.get("patient_info", {})
+                    if isinstance(patient_info, dict) and patient_info.get("name"):
+                        summary += f" for {patient_info.get('name')}"
+                    
+                    medications = rx.get("medications", [])
+                    if medications:
+                        summary += "\nMedications prescribed:"
+                        for idx, med in enumerate(medications, 1):
+                            med_name = med.get("name", "Unknown medication")
+                            dosage = med.get("dosage", "")
+                            frequency = med.get("frequency", "")
+                            duration = med.get("duration", "")
+                            timing = med.get("timing", {})
+                            
+                            summary += f"\n  {idx}. {med_name}"
+                            if dosage:
+                                summary += f" - {dosage}"
+                            if frequency:
+                                summary += f" - {frequency}"
+                            if duration:
+                                summary += f" for {duration}"
+                            if timing and isinstance(timing, dict):
+                                timing_str = []
+                                if timing.get("morning"): timing_str.append("Morning")
+                                if timing.get("afternoon"): timing_str.append("Afternoon")
+                                if timing.get("night"): timing_str.append("Night")
+                                if timing_str:
+                                    summary += f" ({', '.join(timing_str)})"
+                                if timing.get("instruction"):
+                                    summary += f" - {timing.get('instruction')}"
+                    
+                    if rx.get("diagnosis"):
+                        summary += f"\nDiagnosis: {rx.get('diagnosis')}"
+                    
+                    if rx.get("additional_instructions"):
+                        summary += f"\nInstructions: {rx.get('additional_instructions')}"
+                    
+                    prescription_summaries.append(summary)
+                
+                if prescription_summaries:
+                    prescription_context = "\n\nRecent Prescriptions:\n" + "\n".join(prescription_summaries)
+                    logger.info(f"✅ Prescription context created with {len(prescription_summaries)} items (FULL DETAILS)")
+        except Exception as e:
+            logger.error(f"Failed to fetch prescription context: {e}")
+        
+        # Fetch recent lab reports
+        lab_report_context = ""
+        try:
+            recent_lab_reports = await mongodb_manager.db.lab_reports.find(
+                {"user_id": user_id}
+            ).sort("uploaded_at", -1).limit(3).to_list(length=3)
+            
+            if recent_lab_reports:
+                logger.info(f"🔬 Found {len(recent_lab_reports)} recent lab reports")
+                lab_summaries = []
+                
+                for lab in recent_lab_reports:
+                    # Data is now at top level, not nested
+                    summary = f"🔬 Lab Report from {lab.get('date', 'Unknown date')}"
+                    if lab.get("lab_name"):
+                        summary += f" - {lab.get('lab_name')}"
+                    
+                    tests = lab.get("tests", [])
+                    if tests:
+                        result_list = ", ".join([f"{t.get('name', 'Unknown')}: {t.get('result', 'N/A')}" for t in tests[:3]])
+                        summary += f" | Results: {result_list}"
+                        if len(tests) > 3:
+                            summary += f" (+{len(tests)-3} more)"
+                    
+                    lab_summaries.append(summary)
+                
+                if lab_summaries:
+                    lab_report_context = "\n\nRecent Lab Reports:\n" + "\n".join(lab_summaries)
+                    logger.info(f"✅ Lab report context created with {len(lab_summaries)} items")
+        except Exception as e:
+            logger.error(f"Failed to fetch lab report context: {e}")
+        
+        # Fetch recent discharge summaries
+        discharge_context = ""
+        try:
+            recent_discharges = await mongodb_manager.db.discharge_summaries.find(
+                {"user_id": user_id}
+            ).sort("uploaded_at", -1).limit(2).to_list(length=2)
+            
+            if recent_discharges:
+                logger.info(f"🏥 Found {len(recent_discharges)} recent discharge summaries")
+                discharge_summaries = []
+                
+                for discharge in recent_discharges:
+                    # Data is now at top level, not nested
+                    summary = f"🏥 Discharge Summary from {discharge.get('admission_date', 'Unknown date')}"
+                    
+                    hospital_info = discharge.get("hospital_info", {})
+                    if isinstance(hospital_info, dict) and hospital_info.get("name"):
+                        summary += f" - {hospital_info.get('name')}"
+                    
+                    if discharge.get("diagnosis"):
+                        summary += f" | Diagnosis: {discharge.get('diagnosis')}"
+                    
+                    procedures = discharge.get("procedures", [])
+                    if procedures:
+                        proc_list = procedures if isinstance(procedures, list) else [procedures]
+                        summary += f" | Procedures: {', '.join(proc_list[:2])}"
+                    
+                    discharge_summaries.append(summary)
+                
+                if discharge_summaries:
+                    discharge_context = "\n\nRecent Discharge Summaries:\n" + "\n".join(discharge_summaries)
+                    logger.info(f"✅ Discharge summary context created with {len(discharge_summaries)} items")
+        except Exception as e:
+            logger.error(f"Failed to fetch discharge summary context: {e}")
+        
         try:
             recent_docs = await mongodb_manager.db.user_documents.find(
                 {"user_id": user_id, "status": "processed"}
@@ -1160,7 +1484,10 @@ async def chat(
         except Exception as e:
             logger.error(f"Failed to fetch document context: {e}")
         
-        user_profile_raw["document_context"] = document_context
+        # Combine all medical document contexts
+        combined_context = prescription_context + lab_report_context + discharge_context + document_context
+        
+        user_profile_raw["document_context"] = combined_context
         user_profile_raw["full_documents_text"] = full_documents_text  # For detailed queries
         
         # Anonymize user data (DISHA compliance)
@@ -1185,41 +1512,81 @@ User Profile (Anonymized ID: {anonymous_id}):
 - Medical Conditions: {anonymized_profile.get('medical_history', [])}
 - Allergies: {anonymized_profile.get('allergies', [])}
 - Current Medications: {anonymized_profile.get('medications', [])}
-{document_context}
+{combined_context}
 """
         
-        # --- CHAT HISTORY INTEGRATION ---
-        # Fetch last 5 messages from this session
+        # --- CHAT HISTORY INTEGRATION WITH ENHANCED CONTEXT ---
+        # Fetch conversation history from this session (all messages for full context)
         history_msgs = await mongodb_manager.db.messages.find(
             {"session_id": session_id}
         ).sort("timestamp", 1).to_list(length=None)
         
+        # Build structured conversation history for the AI
+        conversation_history = []
         history_context = ""
+        
         if history_msgs:
-            history_context += "\n\nPrevious conversation:\n"
-            for i, msg in enumerate(history_msgs[-5:], 1):
+            # Use sliding window: last 10 messages for detailed context
+            recent_messages = history_msgs[-10:] if len(history_msgs) > 10 else history_msgs
+            
+            history_context += "\n\n=== Conversation History ===\n"
+            for msg in recent_messages:
                 role = msg.get("role", "unknown")
                 content = msg.get("content")
+                
                 # Handle content that might be a dict
                 if isinstance(content, dict):
                     content = content.get("output", str(content))
-                history_context += f"{i}. {role.capitalize()}: {content}\n"
+                
+                # Add to structured history
+                conversation_history.append({
+                    "role": role,
+                    "content": content,
+                    "timestamp": msg.get("timestamp"),
+                    "intent": msg.get("intent")
+                })
+                
+                # Add to text context
+                history_context += f"\n{role.upper()}: {content[:200]}..." if len(str(content)) > 200 else f"\n{role.upper()}: {content}"
+            
+            # If conversation is longer than 10 messages, add summary context
+            if len(history_msgs) > 10:
+                history_context += f"\n\n(Note: Showing last 10 of {len(history_msgs)} total messages)"
+                
+                # Try to get session summary if available
+                session = await mongodb_manager.db.sessions.find_one({"_id": session_id})
+                if session and session.get("context_summary"):
+                    history_context += f"\n\nConversation Summary: {session['context_summary']}"
         
-        # Combine context
-        full_context_query = f"{profile_context}\n{history_context}\nUser Query: {request.query}"
+        # Combine all context
+        full_context_query = f"""
+{profile_context}
+{history_context}
+
+=== Current User Query ===
+User Query: {request.query}
+        """
         
-        # Store user message (plain text)
+        # Store user message with enhanced metadata
         user_msg_doc = {
             "session_id": session_id,
             "user_id": user_id,
             "role": "user",
             "content": request.query,
-            "intent": None,
+            "intent": None,  # Will be updated after processing
             "timestamp": datetime.utcnow(),
             "ip_address": req.client.host if req else "unknown",
-            "blockchain_tx_hash": None
+            "blockchain_tx_hash": None,
+            "metadata": {
+                "locale": request.locale,
+                "latitude": request.latitude,
+                "longitude": request.longitude,
+                "user_agent": req.headers.get("user-agent") if req else None
+            },
+            "token_count": len(request.query.split())  # Approximate
         }
-        await mongodb_manager.db.messages.insert_one(user_msg_doc)
+        user_msg_result = await mongodb_manager.db.messages.insert_one(user_msg_doc)
+        user_msg_id = user_msg_result.inserted_id
         
         # Log to blockchain (if enabled)
         if blockchain_logger and blockchain_logger.enabled:
@@ -1279,16 +1646,23 @@ User Profile (Anonymized ID: {anonymous_id}):
         
         logger.info(f"🚀 [BACKEND STEP 3] Calling workflow.run with user_location={user_location_tuple}")
         
+        # Track start time for performance metrics
+        import time
+        start_time = time.time()
+        
         result = await workflow.run(
             user_input=request.query,
             query_for_classification=full_context_query,  # Pass full context
             user_profile=user_profile_raw,  # Pass profile for potential updates
-            conversation_history=history_context,  # Pass conversation history
+            conversation_history=conversation_history,  # Pass structured conversation history
             user_location=user_location_tuple,
             response_language=response_language  # Tell workflow what language to respond in
         )
         
+        response_time_ms = int((time.time() - start_time) * 1000)
+        
         logger.info(f"📊 [BACKEND STEP 4] Workflow result keys: {list(result.keys())}")
+        logger.info(f"⏱️ Response time: {response_time_ms}ms")
         logger.info(f"   - Has 'nearby_hospitals': {'nearby_hospitals' in result}")
         if 'nearby_hospitals' in result:
             logger.info(f"   - nearby_hospitals type: {type(result['nearby_hospitals'])}")
@@ -1406,7 +1780,7 @@ User Profile (Anonymized ID: {anonymous_id}):
             base_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:8000")
             audio_url = f"{base_url}/audio/{filename}"
         
-        # Store assistant response
+        # Store assistant response with enhanced metadata
         assistant_content = str(result.get("output", ""))
         if not assistant_content:
             assistant_content = str(result)
@@ -1419,14 +1793,51 @@ User Profile (Anonymized ID: {anonymous_id}):
             "intent": result.get("intent"),
             "timestamp": datetime.utcnow(),
             "ip_address": req.client.host if req else "unknown",
-            "blockchain_tx_hash": None
+            "blockchain_tx_hash": None,
+            "metadata": {
+                "language": response_language,
+                "model_used": result.get("model_used", "gpt-4o-mini"),
+                "citations": result.get("citations", []),
+                "video_resources": result.get("video_resources"),
+                "nearby_facilities": result.get("nearby_facilities")
+            },
+            "token_count": len(assistant_content.split()),  # Approximate
+            "response_time_ms": response_time_ms,
+            "audio_url": audio_url if audio_url else None,
+            "citations": result.get("citations", [])
         }
-        await mongodb_manager.db.messages.insert_one(assistant_msg_doc)
+        assistant_msg_result = await mongodb_manager.db.messages.insert_one(assistant_msg_doc)
         
-        # Update session timestamp
+        # Update user message with detected intent
+        if result.get("intent"):
+            await mongodb_manager.db.messages.update_one(
+                {"_id": user_msg_id},
+                {"$set": {"intent": result.get("intent")}}
+            )
+        
+        # Update session metadata with proper MongoDB operators
+        session_update_set = {
+            "updated_at": datetime.utcnow(),
+            "last_intent": result.get("intent")
+        }
+        
+        # Update primary language if detected
+        if response_language:
+            session_update_set["primary_language"] = response_language
+        
+        # Update session with both $set and $inc operations
+        update_operations = {
+            "$set": session_update_set,
+            "$inc": {"message_count": 2}  # User + assistant
+        }
+        
+        # Add topic if detected (you can enhance this with NLP)
+        if result.get("intent"):
+            update_operations["$addToSet"] = {"topics": result.get("intent")}
+        
         await mongodb_manager.db.sessions.update_one(
             {"_id": session_id},
-            {"$set": {"updated_at": datetime.utcnow()}}
+            update_operations
         )
         
         # Audit log
@@ -1526,17 +1937,16 @@ async def get_session_messages(
     session_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get messages from a session (decrypted)"""
+    """Get messages from a session with full metadata"""
     try:
         user_id = current_user["_id"]
-        user_salt = current_user["encryption_key_id"]
         
         # Verify session ownership
         session = await mongodb_manager.db.sessions.find_one({"_id": ObjectId(session_id)})
         if not session or session["user_id"] != user_id:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        # Get messages
+        # Get messages with full metadata
         cursor = mongodb_manager.db.messages.find(
             {"session_id": ObjectId(session_id)}
         ).sort("timestamp", 1)
@@ -1545,18 +1955,109 @@ async def get_session_messages(
         async for msg in cursor:
             content = msg.get("content", "")
             
-            messages.append({
+            message_data = {
                 "role": msg["role"],
                 "content": content,
-                "timestamp": msg["timestamp"].isoformat()
-            })
+                "timestamp": msg["timestamp"].isoformat(),
+                "intent": msg.get("intent"),
+                "audio_url": msg.get("audio_url"),
+                "metadata": msg.get("metadata", {}),
+                "citations": msg.get("citations", []),
+                "response_time_ms": msg.get("response_time_ms")
+            }
+            
+            messages.append(message_data)
         
-        return {"messages": messages}
+        # Include session metadata
+        session_metadata = {
+            "message_count": session.get("message_count", len(messages)),
+            "primary_language": session.get("primary_language"),
+            "topics": session.get("topics", []),
+            "last_intent": session.get("last_intent"),
+            "context_summary": session.get("context_summary")
+        }
+        
+        return {
+            "messages": messages,
+            "session_metadata": session_metadata
+        }
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Get messages error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/sessions/{session_id}/summarize")
+async def summarize_conversation(
+    session_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate AI summary of conversation for long sessions"""
+    try:
+        user_id = current_user["_id"]
+        
+        # Verify session ownership
+        session = await mongodb_manager.db.sessions.find_one({"_id": ObjectId(session_id)})
+        if not session or session["user_id"] != user_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        # Get all messages
+        messages = await mongodb_manager.db.messages.find(
+            {"session_id": ObjectId(session_id)}
+        ).sort("timestamp", 1).to_list(length=None)
+        
+        if len(messages) < 5:
+            return {"summary": "Conversation too short for summary", "message_count": len(messages)}
+        
+        # Build conversation text
+        conversation_text = ""
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if isinstance(content, dict):
+                content = content.get("output", str(content))
+            conversation_text += f"{role.upper()}: {content}\n\n"
+        
+        # Generate summary using LLM
+        summary_prompt = f"""Summarize the following healthcare conversation in 2-3 sentences. Focus on:
+1. Main health concerns discussed
+2. Key advice or instructions provided
+3. Follow-up actions recommended
+
+Conversation:
+{conversation_text[:8000]}  # Limit to avoid token overflow
+
+Summary:"""
+        
+        summary_response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a medical conversation summarizer."},
+                {"role": "user", "content": summary_prompt}
+            ],
+            max_tokens=200
+        )
+        
+        summary = summary_response.choices[0].message.content
+        
+        # Store summary in session
+        await mongodb_manager.db.sessions.update_one(
+            {"_id": ObjectId(session_id)},
+            {"$set": {"context_summary": summary, "updated_at": datetime.utcnow()}}
+        )
+        
+        return {
+            "summary": summary,
+            "message_count": len(messages),
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Summarize conversation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1897,10 +2398,9 @@ async def delete_document(
     document_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Delete a user's document"""
+    """Delete a document"""
     try:
         user_id = current_user["_id"]
-        
         result = await mongodb_manager.db.user_documents.delete_one({
             "_id": ObjectId(document_id),
             "user_id": user_id
@@ -1909,13 +2409,77 @@ async def delete_document(
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        logger.info(f"🗑️ Document deleted: {document_id}")
         return {"success": True, "message": "Document deleted"}
-        
     except Exception as e:
         logger.error(f"Error deleting document: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/recovery-plans")
+async def get_recovery_plans(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all recovery plans for current user from discharge summaries"""
+    try:
+        user_id = current_user["_id"]
+        
+        # Fetch discharge summaries with recovery plans
+        discharge_summaries = await mongodb_manager.db.discharge_summaries.find(
+            {"user_id": user_id, "recovery_plan": {"$exists": True}}
+        ).sort("uploaded_at", -1).to_list(length=10)
+        
+        formatted_plans = []
+        for summary in discharge_summaries:
+            formatted_plans.append({
+                "id": str(summary["_id"]),
+                "date": summary.get("discharge_date") or summary.get("uploaded_at").isoformat(),
+                "diagnosis": summary.get("diagnosis", "Not specified"),
+                "recovery_plan": summary.get("recovery_plan"),
+                "uploaded_at": summary.get("uploaded_at").isoformat(),
+                "filename": summary.get("filename", "Discharge Summary")
+            })
+        
+        return {"recovery_plans": formatted_plans}
+        
+    except Exception as e:
+        logger.error(f"Error fetching recovery plans: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/recovery-plans/{plan_id}")
+async def get_recovery_plan_details(
+    plan_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get detailed recovery plan by ID"""
+    try:
+        user_id = current_user["_id"]
+        
+        summary = await mongodb_manager.db.discharge_summaries.find_one({
+            "_id": ObjectId(plan_id),
+            "user_id": user_id
+        })
+        
+        if not summary:
+            raise HTTPException(status_code=404, detail="Recovery plan not found")
+        
+        return {
+            "id": str(summary["_id"]),
+            "date": summary.get("discharge_date") or summary.get("uploaded_at").isoformat(),
+            "diagnosis": summary.get("diagnosis"),
+            "procedures": summary.get("procedures", []),
+            "medications": summary.get("medications", []),
+            "recovery_plan": summary.get("recovery_plan"),
+            "follow_up_instructions": summary.get("follow_up_instructions"),
+            "uploaded_at": summary.get("uploaded_at").isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching recovery plan details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/documents/{document_id}")
 
 # -------------------------------------------------------
 # TTS AUDIO ENDPOINT
@@ -2037,4 +2601,459 @@ async def get_blockchain_statistics():
         }
     except Exception as e:
         logger.error(f"Stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== IMAGE EXTRACTION ENDPOINTS ====================
+
+@app.post("/extract/prescription")
+async def extract_prescription_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+    request: Request = None
+):
+    """
+    Extract structured data from prescription image/PDF using OpenAI Vision.
+    Supports: JPG, PNG (handwritten and printed)
+    """
+    try:
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/jpg"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type. Allowed: {', '.join(allowed_types)}"
+            )
+        
+        # Save uploaded file temporarily
+        upload_dir = Path("uploads/prescriptions")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_extension = Path(file.filename).suffix
+        temp_filename = f"{current_user['_id']}_{datetime.utcnow().timestamp()}{file_extension}"
+        temp_path = upload_dir / temp_filename
+        
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        logger.info(f"Processing prescription: {temp_filename}")
+        
+        # Extract data using OpenAI Vision (global extractor)
+        try:
+            logger.info("Calling OpenAI Vision API for extraction...")
+            extracted_data = image_extractor.extract_prescription_data(str(temp_path))
+            logger.info(f"Extraction result: {extracted_data is not None}")
+        except Exception as extract_err:
+            logger.error(f"Extraction API error: {extract_err}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Extraction failed: {str(extract_err)}"
+            )
+        
+        if not extracted_data:
+            logger.warning("No data extracted from image")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to extract data from image. Please ensure image is clear and contains medical information."
+            )
+        
+        # Store extraction in MongoDB for user history (flatten extracted_data)
+        # Handle both 'medicines' and 'medications' fields for backward compatibility
+        medications = extracted_data.get("medications") or extracted_data.get("medicines", [])
+        
+        prescription_doc = {
+            "user_id": current_user["_id"],
+            "filename": file.filename,
+            "file_path": str(temp_path),
+            "uploaded_at": datetime.utcnow(),
+            "extraction_method": "openai_vision",
+            # Flatten extracted_data fields to top level
+            "date": extracted_data.get("date"),
+            "patient_info": extracted_data.get("patient_info"),
+            "doctor_info": extracted_data.get("doctor_info"),
+            "medications": medications,
+            "diagnosis": extracted_data.get("diagnosis"),
+            "additional_instructions": extracted_data.get("additional_instructions") or extracted_data.get("notes")
+        }
+        
+        # Log what was extracted
+        logger.info(f"📋 Extracted prescription data:")
+        logger.info(f"   - Date: {prescription_doc.get('date')}")
+        logger.info(f"   - Medications count: {len(medications)}")
+        if medications:
+            for med in medications:
+                logger.info(f"     • {med.get('name', 'Unknown')}")
+        else:
+            logger.warning("⚠️ No medications found in extraction!")
+        
+        logger.info(f"💾 Saving to MongoDB database: {mongodb_manager.db.name}, collection: prescriptions")
+        logger.info(f"Document to save: {prescription_doc}")
+        
+        result = await mongodb_manager.db.prescriptions.insert_one(prescription_doc)
+        
+        logger.info(f"✅ Prescription saved to MongoDB with ID: {result.inserted_id}")
+        
+        # Log audit
+        await log_audit(
+            user_id=current_user["_id"],
+            action="PRESCRIPTION_EXTRACTION",
+            resource_type="prescription",
+            resource_id=result.inserted_id,
+            request=request
+        )
+        
+        return {
+            "success": True,
+            "prescription_id": str(result.inserted_id),
+            "data": extracted_data,
+            "message": "Prescription extracted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Prescription extraction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/extract/discharge")
+async def extract_discharge_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Extract structured data from discharge summary image/PDF using Gemini Vision.
+    """
+    try:
+        from src.document_processor.image_extractor import ImageDocumentExtractor
+        
+        # Validate file type
+        allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type. Allowed: {', '.join(allowed_types)}"
+            )
+        
+        # Save uploaded file
+        upload_dir = Path("uploads/discharge_summaries")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_extension = Path(file.filename).suffix
+        temp_filename = f"{current_user['_id']}_{datetime.utcnow().timestamp()}{file_extension}"
+        temp_path = upload_dir / temp_filename
+        
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        logger.info(f"Processing discharge summary: {temp_filename}")
+        
+        # Extract data
+        extractor = ImageDocumentExtractor()
+        extracted_data = extractor.extract_discharge_summary(str(temp_path))
+        
+        # Handle PDF text extraction
+        if extracted_data and "_pdf_text" in extracted_data:
+            logger.info("Using text-based extraction for PDF")
+            pdf_text = extracted_data["_pdf_text"]
+            
+            # Use LLM to extract structured data from text (use existing config LLM)
+            prompt = f"""Extract structured information from this discharge summary text:
+
+{pdf_text}
+
+Return ONLY a JSON object with this structure:
+{{
+  "date": "discharge date",
+  "patient_info": {{"name": "", "age": "", "gender": ""}},
+  "hospital_info": {{"name": ""}},
+  "admission_date": "",
+  "discharge_date": "",
+  "diagnosis": "primary diagnosis",
+  "procedures": ["list of procedures"],
+  "medications": [{{"name": "", "dosage": "", "frequency": ""}}],
+  "follow_up_instructions": "instructions"
+}}"""
+            
+            response = await config.llm_primary.ainvoke(prompt)
+            import json, re
+            json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
+            if json_match:
+                extracted_data = json.loads(json_match.group())
+            else:
+                extracted_data = json.loads(response.content)
+        
+        if not extracted_data or "_pdf_text" in extracted_data:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to extract data from discharge summary"
+            )
+        
+        # Store in MongoDB (flatten extracted_data)
+        discharge_doc = {
+            "user_id": current_user["_id"],
+            "filename": file.filename,
+            "file_path": str(temp_path),
+            "uploaded_at": datetime.utcnow(),
+            "extraction_method": "openai_vision",
+            # Flatten extracted_data fields
+            "date": extracted_data.get("date"),
+            "patient_info": extracted_data.get("patient_info"),
+            "hospital_info": extracted_data.get("hospital_info"),
+            "admission_date": extracted_data.get("admission_date"),
+            "discharge_date": extracted_data.get("discharge_date"),
+            "diagnosis": extracted_data.get("diagnosis"),
+            "procedures": extracted_data.get("procedures", []),
+            "medications": extracted_data.get("medications", []),
+            "follow_up_instructions": extracted_data.get("follow_up_instructions")
+        }
+        
+        result = await mongodb_manager.db.discharge_summaries.insert_one(discharge_doc)
+        
+        # Generate detailed recovery action plan
+        logger.info("🗓️ Generating recovery action plan...")
+        recovery_plan = await generate_recovery_action_plan(discharge_doc, config)
+        
+        # Store the recovery plan in the document
+        await mongodb_manager.db.discharge_summaries.update_one(
+            {"_id": result.inserted_id},
+            {"$set": {"recovery_plan": recovery_plan}}
+        )
+        
+        logger.info(f"✅ Discharge summary and recovery plan saved with ID: {result.inserted_id}")
+        
+        return {
+            "success": True,
+            "discharge_id": str(result.inserted_id),
+            "data": extracted_data,
+            "recovery_plan": recovery_plan,
+            "message": "Discharge summary extracted and recovery plan generated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Discharge extraction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/extract/lab-report")
+async def extract_lab_report_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Extract lab test results from report images.
+    """
+    try:
+        from src.document_processor.image_extractor import ImageDocumentExtractor
+        
+        # Save file
+        upload_dir = Path("uploads/lab_reports")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_extension = Path(file.filename).suffix
+        temp_filename = f"{current_user['_id']}_{datetime.utcnow().timestamp()}{file_extension}"
+        temp_path = upload_dir / temp_filename
+        
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        # Extract
+        extractor = ImageDocumentExtractor()
+        extracted_data = extractor.extract_lab_report(str(temp_path))
+        
+        if not extracted_data:
+            raise HTTPException(status_code=500, detail="Failed to extract lab report data")
+        
+        # Store (flatten extracted_data)
+        lab_doc = {
+            "user_id": current_user["_id"],
+            "filename": file.filename,
+            "file_path": str(temp_path),
+            "uploaded_at": datetime.utcnow(),
+            "extraction_method": "openai_vision",
+            # Flatten extracted_data fields
+            "date": extracted_data.get("date"),
+            "patient_info": extracted_data.get("patient_info"),
+            "lab_name": extracted_data.get("lab_name"),
+            "tests": extracted_data.get("tests", []),
+            "doctor_info": extracted_data.get("doctor_info")
+        }
+        
+        result = await mongodb_manager.db.lab_reports.insert_one(lab_doc)
+        
+        return {
+            "success": True,
+            "report_id": str(result.inserted_id),
+            "data": extracted_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Lab report extraction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== OTC MEDICATION CHECKER ENDPOINTS ====================
+
+class MedicationCheckRequest(BaseModel):
+    medication: str
+    dosage: Optional[str] = None
+
+
+class BatchMedicationCheckRequest(BaseModel):
+    medications: List[str]
+
+
+@app.post("/otc/check")
+async def check_otc_medication(
+    request: MedicationCheckRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Check if a medication is available over-the-counter or requires prescription.
+    Uses vector search + LLM verification for accurate results.
+    """
+    try:
+        from src.utils.otc_medication_checker import OTCMedicationChecker
+        
+        checker = OTCMedicationChecker()
+        result = checker.check_medication(request.medication, request.dosage)
+        
+        # Log the check
+        await mongodb_manager.db.otc_checks.insert_one({
+            "user_id": current_user["_id"],
+            "medication": request.medication,
+            "dosage": request.dosage,
+            "result": result,
+            "timestamp": datetime.utcnow()
+        })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"OTC check error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/otc/check-batch")
+async def check_otc_medications_batch(
+    request: BatchMedicationCheckRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Check multiple medications at once for OTC availability.
+    """
+    try:
+        from src.utils.otc_medication_checker import OTCMedicationChecker
+        
+        checker = OTCMedicationChecker()
+        results = checker.check_medications_batch(request.medications)
+        
+        # Log batch check
+        await mongodb_manager.db.otc_checks.insert_one({
+            "user_id": current_user["_id"],
+            "medications": request.medications,
+            "results": results,
+            "check_type": "batch",
+            "timestamp": datetime.utcnow()
+        })
+        
+        return results
+        
+    except Exception as e:
+        logger.error(f"OTC batch check error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/otc/list")
+async def get_otc_medication_list():
+    """
+    Get the complete list of approved OTC medications (public endpoint).
+    """
+    try:
+        from src.utils.otc_medication_checker import APPROVED_OTC_MEDICATIONS
+        
+        return {
+            "count": len(APPROVED_OTC_MEDICATIONS),
+            "medications": APPROVED_OTC_MEDICATIONS
+        }
+        
+    except Exception as e:
+        logger.error(f"OTC list error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== COMBINED PRESCRIPTION ANALYSIS ====================
+
+@app.post("/analyze-prescription")
+async def analyze_prescription_complete(
+    file: UploadFile = File(...),
+    check_otc: bool = Form(True),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Complete prescription analysis:
+    1. Extract prescription data from image
+    2. Check which medications are OTC
+    3. Provide safety recommendations
+    """
+    try:
+        from src.document_processor.image_extractor import ImageDocumentExtractor
+        from src.utils.otc_medication_checker import OTCMedicationChecker
+        
+        # Step 1: Extract prescription
+        upload_dir = Path("uploads/prescriptions")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_extension = Path(file.filename).suffix
+        temp_filename = f"{current_user['_id']}_{datetime.utcnow().timestamp()}{file_extension}"
+        temp_path = upload_dir / temp_filename
+        
+        with open(temp_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        extractor = ImageDocumentExtractor()
+        prescription_data = extractor.extract_prescription_data(str(temp_path))
+        
+        if not prescription_data:
+            raise HTTPException(status_code=500, detail="Failed to extract prescription data")
+        
+        # Step 2: Check OTC status if requested
+        otc_results = None
+        if check_otc and prescription_data.get("medicines"):
+            checker = OTCMedicationChecker()
+            medicine_names = [med.get("name") for med in prescription_data["medicines"] if med.get("name")]
+            otc_results = checker.check_medications_batch(medicine_names)
+        
+        # Step 3: Store complete analysis
+        analysis_doc = {
+            "user_id": current_user["_id"],
+            "filename": file.filename,
+            "prescription_data": prescription_data,
+            "otc_analysis": otc_results,
+            "analyzed_at": datetime.utcnow()
+        }
+        
+        result = await mongodb_manager.db.prescription_analyses.insert_one(analysis_doc)
+        
+        return {
+            "success": True,
+            "analysis_id": str(result.inserted_id),
+            "prescription": prescription_data,
+            "otc_check": otc_results,
+            "summary": {
+                "total_medicines": len(prescription_data.get("medicines", [])),
+                "otc_safe_count": len(otc_results.get("otc_safe", [])) if otc_results else 0,
+                "prescription_required_count": len(otc_results.get("prescription_required", [])) if otc_results else 0
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Complete prescription analysis error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
